@@ -56,5 +56,6 @@ dkms.conf
 compile_commands.json
 
 build
+build-*
 !.vscode/*
 .DS_Store

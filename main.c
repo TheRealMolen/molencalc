@@ -60,7 +60,7 @@ void readline(char *buffer, size_t size)
             printf("\n");
             break; // End of line
         }
-        else if ((KEY_BACKSPACE || ch == KEY_DEL) && index > 0)
+        else if ((ch == KEY_BACKSPACE || ch == 0x7f) && index > 0)
         {
             index--;
             buffer[index] = '\0'; // Remove last character
@@ -83,7 +83,7 @@ int main()
 
     init_platform();
 
-    printf("molencalc v11.    don't panic\n");
+    printf("molencalc v11    don't panic\n");
 
     for (;;)
     {

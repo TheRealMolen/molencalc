@@ -34,8 +34,6 @@ project(molencalc C CXX ASM)
 pico_sdk_init()
 
 
-# Add executable. Default name is the project name, version 0.1
-
 add_executable(molencalc
         main.c
         drivers/display.c
@@ -60,6 +58,8 @@ add_executable(molencalc
 
 pico_set_program_name(molencalc "molencalc")
 pico_set_program_version(molencalc "1.0")
+
+set_target_properties(molencalc PROPERTIES OUTPUT_NAME "molencalc-${PICO_BOARD}")
 
 
 # Modify the below lines to enable/disable output over UART/USB
