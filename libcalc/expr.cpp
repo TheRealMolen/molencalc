@@ -1,0 +1,143 @@
+#include "expr.h"
+
+#include "funcs.h"
+#include "parser.h"
+#include "symbols.h"
+
+#include <cmath>
+#include <cstring>
+
+//-------------------------------------------------------------------------------------------------
+
+// primary = number | "(" expression ")"
+double parse_primary(ParseCtx& ctx)
+{
+    if (accept(ctx, Token::LParen))
+    {
+        double val = parse_expression(ctx);
+        expect(ctx, Token::RParen);
+        return val;
+    }
+
+    return expect_number(ctx);
+}
+
+// postfix ::= primary | symbol "(" expression ")" | symbol
+double parse_postfix(ParseCtx& ctx)
+{
+    if (peek(ctx, Token::Symbol))
+    {
+        const int sym_name_pos = ctx.CurrIx;
+
+        char symbol[kMaxSymbolLength];
+        strcpy(symbol, ctx.TokenSymbol);
+        expect(ctx, Token::Symbol);
+
+        // if this is a (, we have a fn call. else it's a named value
+        if (accept(ctx, Token::LParen))
+        {
+            double arg1 = parse_expression(ctx);
+            if (!expect(ctx, Token::RParen))
+                return 0.0;
+
+            double val;
+            if (eval_function(symbol, arg1, val))
+                return val;
+
+            ctx.CurrIx = sym_name_pos;
+            on_parse_error(ctx, "unknown function");
+            return 0.0;
+        }
+        else
+        {
+            double val;
+            if (eval_named_value(symbol, val))
+                return val;
+
+            ctx.CurrIx = sym_name_pos;
+            on_parse_error(ctx, "unknown named value");
+            return 0.0;
+        }
+    }
+
+    return parse_primary(ctx);
+}
+
+// exponent ::= postfix [ "**" postfix ]
+double parse_exponent(ParseCtx& ctx)
+{
+    double val = parse_postfix(ctx);
+    if (ctx.Error)
+        return 0;
+
+    if (accept(ctx, Token::Exponent))
+    {
+        double power = parse_postfix(ctx);
+        if (ctx.Error)
+            return 0;
+
+        val = std::pow(val, power);
+    }
+
+    return val;
+}
+
+// unary = exponent | "+" unary | "-" unary
+double parse_unary(ParseCtx& ctx)
+{
+    if (accept(ctx, Token::Plus))
+        return parse_unary(ctx);
+    if (accept(ctx, Token::Minus))
+        return -1.0 * parse_unary(ctx);
+
+    return parse_exponent(ctx);
+}
+
+// mul ::= unary | mul "*" unary | mul "/" unary
+double parse_mul(ParseCtx& ctx)
+{
+    double val = parse_unary(ctx);
+
+    while (!ctx.Error && (peek(ctx, Token::Times) || peek(ctx, Token::Divide)))
+    {
+        if (accept(ctx, Token::Times))
+        {
+            val = val * parse_unary(ctx);
+        }
+        else if (accept(ctx, Token::Divide))
+        {
+            val = val / parse_unary(ctx);
+        }
+    }
+
+    return val;
+}
+
+// add ::= mul | add "+" mul | add "-" mul
+double parse_add(ParseCtx& ctx)
+{
+    double val = parse_mul(ctx);
+
+    while (!ctx.Error && (peek(ctx, Token::Plus) || peek(ctx, Token::Minus)))
+    {
+        if (accept(ctx, Token::Plus))
+        {
+            val = val + parse_mul(ctx);
+        }
+        else if (accept(ctx, Token::Minus))
+        {
+            val = val - parse_mul(ctx);
+        }
+    }
+
+    return val;
+}
+
+
+double parse_expression(ParseCtx& ctx)
+{
+    return parse_add(ctx);
+}
+
+//-------------------------------------------------------------------------------------------------
+
