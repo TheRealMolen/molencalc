@@ -14,7 +14,7 @@ bool calc_eval(const char* expr, char* resBuffer, int resBufferLen);
 //-------------------------------------------------------------------------------------------------
 
 #ifndef MC_PLOT_WIDTH
-#define MC_PLOT_WIDTH   160
+#define MC_PLOT_WIDTH   240
 #endif
 
 #ifndef MC_PLOT_HEIGHT

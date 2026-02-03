@@ -77,11 +77,11 @@ int main()
 
     init_platform();
 
-    printf("molencalc v13      don't panic\n");
+    printf("molencalc v15      don't panic\n");
 
     for (;;)
     {
-        printf("\n> ");
+        printf("\n>");
 
         readline(inputBuf, sizeof(inputBuf));
         if (strlen(inputBuf) == 0)
@@ -93,8 +93,25 @@ int main()
             rom_reset_usb_boot(0, 0);
             return 0;
         }
+        else if (strcmp(inputBuf, "big") == 0)
+        {
+            lcd_set_font(&font_10x16);
+            continue;
+        }
+        else if (strcmp(inputBuf, "small") == 0)
+        {
+            lcd_set_font(&font_5x10);
+            continue;
+        }
 
         calc_eval(inputBuf, outputBuf, sizeof(outputBuf));
         puts(outputBuf);
+
+        const Plot* plot = get_plot();
+        if (plot)
+        {
+            lcd_put_image(plot->Pixels, MC_PLOT_WIDTH, MC_PLOT_HEIGHT);
+            reset_plot();
+        }
     }
 }

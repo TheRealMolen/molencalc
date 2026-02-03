@@ -109,7 +109,7 @@ void lcd_solid_rectangle(uint16_t colour, uint16_t x, uint16_t y, uint16_t width
 void lcd_define_scrolling(uint16_t top_fixed_area, uint16_t bottom_fixed_area);
 void lcd_scroll_reset();
 void lcd_scroll_clear();
-void lcd_scroll_up(uint8_t glyph_height);
+void lcd_scroll_up(uint32_t distance);
 void lcd_scroll_down(void);
 
 // Character and cursor functions
@@ -123,6 +123,7 @@ void lcd_inc_column(uint8_t advance);
 void lcd_backspace();
 
 void lcd_emit(char c);
+void lcd_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh);
 
 void lcd_move_cursor(uint8_t x, uint8_t y);
 void lcd_draw_cursor(void);

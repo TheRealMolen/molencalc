@@ -286,14 +286,14 @@ void lcd_scroll_clear()
 }
 
 // Scroll the screen up one line (make space at the bottom)
-void lcd_scroll_up(uint8_t glyph_height)
+void lcd_scroll_up(uint32_t distance)
 {
     // Ensure the scroll height is non-zero to avoid division by zero
     if (lcd_memory_scroll_height == 0) {
         return; // Exit early if the scroll height is invalid
     }
     // This will rotate the content in the scroll area up by one line
-    lcd_y_offset = (lcd_y_offset + glyph_height) % lcd_memory_scroll_height;
+    lcd_y_offset = (lcd_y_offset + distance) % lcd_memory_scroll_height;
     uint16_t scroll_area_start = lcd_scroll_top + lcd_y_offset;
 
     lcd_disable_interrupts();
@@ -302,10 +302,10 @@ void lcd_scroll_up(uint8_t glyph_height)
     lcd_enable_interrupts();
 
     // Clear the new line at the bottom
-    lcd_solid_rectangle(gBgCol, 0, HEIGHT - glyph_height, WIDTH, glyph_height);
+    lcd_solid_rectangle(gBgCol, 0, HEIGHT - distance, WIDTH, distance);
 
-    if (gCursorY > glyph_height)
-        gCursorY -= glyph_height;
+    if (gCursorY > distance)
+        gCursorY -= distance;
     else
         gCursorY = 0;
 }
@@ -460,6 +460,28 @@ void lcd_emit(char c)
     lcd_draw_cursor(); // draw the cursor at the new position
 }
 
+
+void lcd_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh) 
+{ 
+    // scroll up enough so there's at least imgh pixels free to draw on 
+    // nb. we're over-clearing the back buf at this point as we're about to blat over a chunk with the img 
+    int line_btm = gCursorY; 
+    int img_top = HEIGHT - imgh; 
+    if (line_btm > img_top) 
+    { 
+        lcd_scroll_up(line_btm - img_top); 
+        line_btm = gCursorY; 
+    }
+    if (img_top > line_btm)
+        img_top = line_btm;
+
+    const int img_left = (int)(WIDTH - imgw - 1);
+
+    lcd_blit(pixels, img_left, img_top, imgw, imgh);
+ 
+    gCursorY += imgh;
+} 
+ 
 
 
 //

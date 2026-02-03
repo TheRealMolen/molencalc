@@ -76,8 +76,8 @@ bool parse_axis(ParseCtx& ctx, PlotAxis& axis)
 }
 
 
-// :gy f -pi<x<pi -1<y<1
-// cmd_graph ::= ":" "gy" symbol [axis [axis]]
+// :g f -pi<x<pi, -1<y<1
+// cmd_graph ::= ":" "g" symbol [axis ["," axis]]
 bool cmd_graph_y(ParseCtx& ctx)
 {
     char func_name[kMaxSymbolLength+1];
@@ -113,7 +113,13 @@ bool cmd_graph_y(ParseCtx& ctx)
             on_parse_error(ctx, "unknown axis");
             return false;
         }
+
+        if (!accept(ctx, Token::Comma))
+            break;
     }
+
+    if (!draw_plot(func_name, &x, &y, ctx))
+        return false;
 
     return true;
 }
@@ -147,7 +153,7 @@ bool cmd_help(ParseCtx& ctx)
     const char* helpText =
 R"(commands start with :
 graph of y=f(x)
-  :gy fn [lo<x<hi] [lo<y<hi]
+  :g fn [lo<x<hi] [lo<y<hi]
 set named val
   :let x=expr
 )";
@@ -171,7 +177,7 @@ bool parse_command(ParseCtx& ctx)
     if (!expect_symbol(ctx, cmd))
         return false;
 
-    if (strcmp(cmd, "gy") == 0)
+    if (strcmp(cmd, "g") == 0)
         return cmd_graph_y(ctx);
     if (strcmp(cmd, "let") == 0)
         return cmd_let(ctx);

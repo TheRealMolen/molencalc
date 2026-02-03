@@ -21,6 +21,7 @@ const char* kTokenNames[] =
     "<",">",
     "=",
     ":", "->",
+    ",",
 };
 static_assert((sizeof(kTokenNames) / sizeof(kTokenNames[0])) == size_t(Token::COUNT));
 
@@ -213,6 +214,7 @@ void advance_token(ParseCtx& ctx)
     case '!': ctx.NextToken = Token::Factorial; break;
     case ':': ctx.NextToken = Token::Assign;    break;
     case '=': ctx.NextToken = Token::Equals;    break;
+    case ',': ctx.NextToken = Token::Comma;     break;
 
     case '-':
     {

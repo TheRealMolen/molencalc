@@ -1,6 +1,7 @@
 #include "funcs.h"
 
 #include "expr.h"
+#include "maths.h"
 #include "parser.h"
 #include "symbols.h"
 
@@ -42,6 +43,7 @@ FunctionDef gFunctions[] =
     { .Name = "sin", .FuncPtr = (CalcDoubleFn)sin },
     { .Name = "cos", .FuncPtr = (CalcDoubleFn)cos },
     { .Name = "tan", .FuncPtr = (CalcDoubleFn)tan },
+    { .Name = "sinc", .FuncPtr = (CalcDoubleFn)sinc },
 
     { .Name = "asin", .FuncPtr = (CalcDoubleFn)asin },
     { .Name = "acos", .FuncPtr = (CalcDoubleFn)acos },

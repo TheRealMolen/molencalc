@@ -24,6 +24,7 @@ enum class Token
     Equals,
 
     Assign, Map,
+    Comma,
 
     COUNT,
 };

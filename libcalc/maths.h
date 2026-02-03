@@ -5,4 +5,6 @@
 // otherwise return false
 bool compute_factorial(double& val);
 
+double sinc(double v);
+
 
