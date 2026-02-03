@@ -18,6 +18,14 @@ enum class Token
     Times, Divide,
     Exponent,
     LParen, RParen,
+    Factorial,
+
+    LessThan, GreaterThan,
+    Equals,
+
+    Assign, Map,
+
+    COUNT,
 };
 
 //-----------------------------------------------------------------------------------------------
@@ -42,6 +50,7 @@ struct ParseCtx
 bool accept(ParseCtx& ctx, Token t);
 bool expect(ParseCtx& ctx, Token t);
 double expect_number(ParseCtx& ctx);
+bool expect_symbol(ParseCtx& ctx, char* outSymbolBuf);  // outSymbolBuf must be at least kMaxSymbolLength+1 long
 bool peek(const ParseCtx& ctx, Token t);
 
 void advance_token(ParseCtx& ctx);

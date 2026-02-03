@@ -1,6 +1,12 @@
 #include "symbols.h"
 
+#include "parser.h"
+
 #include <cstring>
+
+//-----------------------------------------------------------------------------------------------
+
+constexpr int kMaxUserSymbols = 25;
 
 //-----------------------------------------------------------------------------------------------
 
@@ -8,6 +14,14 @@ struct SymbolDef
 {
     const char* Name = nullptr;
     double Value = 0.0;
+};
+
+struct UserSymbol
+{
+    char Name[kMaxSymbolLength+1] = {0};
+    double Value = 0.0;
+
+    bool IsUsed = false;
 };
 
 //-----------------------------------------------------------------------------------------------
@@ -19,13 +33,33 @@ SymbolDef gSymbols[] =
 };
 constexpr int kNumSymbols = sizeof(gSymbols) / sizeof(gSymbols[0]);
 
+UserSymbol gUserSymbols[kMaxUserSymbols];
+
 //-----------------------------------------------------------------------------------------------
 
-bool eval_named_value(const char* name, double& outVal)
+const SymbolDef* find_core_symbol(const char* name)
 {
     for (const SymbolDef& sym : gSymbols)
     {
         if (strcmp(sym.Name, name) == 0)
+        {
+            return &sym;
+        }
+    }
+    return nullptr;
+}
+
+bool eval_named_value(const char* name, double& outVal)
+{
+    if (const SymbolDef* sym = find_core_symbol(name))
+    {
+        outVal = sym->Value;
+        return true;
+    }
+
+    for (const UserSymbol& sym : gUserSymbols)
+    {
+        if (sym.IsUsed && (strcmp(sym.Name, name) == 0))
         {
             outVal = sym.Value;
             return true;
@@ -38,8 +72,60 @@ bool eval_named_value(const char* name, double& outVal)
 
 //-----------------------------------------------------------------------------------------------
 
-//-----------------------------------------------------------------------------------------------
+static UserSymbol* find_or_alloc_usersym(const char* name)
+{
+    UserSymbol* free_sym = nullptr;
+
+    for (UserSymbol& sym : gUserSymbols)
+    {
+        if (!sym.IsUsed)
+        {
+            if (!free_sym)
+                free_sym = &sym;
+            continue;
+        }
+
+        if (strcmp(name, sym.Name) == 0)
+            return &sym;
+    }
+
+    if (free_sym)
+    {
+        strcpy(free_sym->Name, name);
+        free_sym->IsUsed = true;
+        return free_sym;
+    }
+
+    return nullptr;
+}
+
+bool define_value(const char* name, double val, ParseCtx& ctx)
+{
+    if (find_core_symbol(name))
+    {
+        on_parse_error(ctx, "can't redefine a constant");
+        return false;
+    }
+
+    UserSymbol* sym = find_or_alloc_usersym(name);
+    if (!sym)
+    {
+        on_parse_error(ctx, "too many user symbols");
+        return false;
+    }
+
+    sym->Value = val;
+    return true;
+}
+
+void undef_value(const char* name)
+{
+    UserSymbol* sym = find_or_alloc_usersym(name);
+    if (sym)
+    {
+        sym->IsUsed = false;
+    }
+}
 
 //-----------------------------------------------------------------------------------------------
-
 

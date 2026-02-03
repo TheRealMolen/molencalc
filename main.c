@@ -11,7 +11,7 @@
 #include "pico/status_led.h"
 
 #include "drivers/picocalc.h"
-#include "drivers/display.h"
+#include "drivers/lcd.h"
 #include "drivers/keyboard.h"
 
 #include "libcalc/libcalc.h"
@@ -28,16 +28,10 @@ void set_onboard_led(uint8_t led)
 
 void init_platform()
 {
-    // Initialize the LED driver and set the LED callback
-    // If the LED driver fails to initialize, we can still run the text starter
-    // without LED support, so we pass NULL to picocalc_init.
-    bool led_init_ok = status_led_init();
+    status_led_init();
 
     stdio_init_all();
     picocalc_init();
-    if (led_init_ok == 0) {
-        display_set_led_callback(set_onboard_led);
-    }
 }
 
 
@@ -83,7 +77,7 @@ int main()
 
     init_platform();
 
-    printf("molencalc v11    don't panic\n");
+    printf("molencalc v13      don't panic\n");
 
     for (;;)
     {

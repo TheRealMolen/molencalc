@@ -27,16 +27,21 @@ static uint16_t lcd_memory_scroll_height = FRAME_HEIGHT; // scroll area height
 static uint16_t lcd_scroll_bottom = 0;                   // bottom fixed area for vertical scrolling
 static uint16_t lcd_y_offset = 0;                        // offset for vertical scrolling
 
-static uint16_t foreground = 0xFF07; // default foreground colour (white)
-static uint16_t background = 0x0000; // default background colour (black)
+static bool gMonospace = false;
 
-static bool underscore = false; // underscore state
-static bool reverse = false;    // reverse video state
-static bool bold = false;       // bold text state
+static int gCursorX = 0;
+static int gCursorY = 0;
+
+#define MAX_COLS ((WIDTH)/2)
+static int gCurrColIx = 0;
+static uint8_t gColWidths[MAX_COLS];
+
+static uint16_t gFgCol = 0xFF07;
+static uint16_t gBgCol = 0x0000;
 
 // Text drawing
-const font_t *font = &font_10x16;
-static uint16_t char_buffer[16 * GLYPH_HEIGHT] __attribute__((aligned(4)));
+const Font *font = &font_10x16;
+static uint16_t char_buffer[16 * FONT_MAX_HEIGHT] __attribute__((aligned(4)));
 
 // Background processing
 static uint32_t irq_state;
@@ -54,76 +59,28 @@ static void lcd_enable_interrupts()
     restore_interrupts(irq_state);
 }
 
-//
-// Character attributes
-//
 
-void lcd_set_reverse(bool reverse_on)
-{
-    // swap foreground and background colors if reverse is "reversed"
-    if ((reverse && !reverse_on) || (!reverse && reverse_on))
-    {
-        uint16_t temp = foreground;
-        foreground = background;
-        background = temp;
-    }
-    reverse = reverse_on;
-}
-
-void lcd_set_underscore(bool underscore_on)
-{
-    // Underscore is not implemented, but we can toggle the state
-    underscore = underscore_on;
-}
-
-void lcd_set_bold(bool bold_on)
-{
-    // Toggles the bold state. Bold text is implemented in the lcd_putc function.
-    bold = bold_on;
-}
-
-void lcd_set_font(const font_t *new_font)
+void lcd_set_font(const Font *new_font)
 {
     // Set the new font
     font = new_font;
 }
 
-uint8_t lcd_get_columns(void)
-{
-    // Calculate the number of columns based on the font width and display width
-    return WIDTH / font->width;
-}
-
-uint8_t lcd_get_glyph_width(void)
-{
-    // Return the width of the current font glyph
-    return font->width;
-}
-
 // Set foreground colour
 void lcd_set_foreground(uint16_t colour)
 {
-    if (reverse)
-    {
-        background = colour; // if reverse is enabled, set background to the new foreground colour
-    }
-    else
-    {
-        foreground = colour;
-    }
+    gFgCol = colour;
 }
 
 // Set background colour
 void lcd_set_background(uint16_t colour)
 {
-    if (reverse)
-    {
-        foreground = colour; // if reverse is enabled, set foreground to the new background colour
-    }
-    else
-    {
-        background = colour;
-    }
+    gBgCol = colour;
+}
+
+void lcd_set_monospace(bool mono)
+{
+    gMonospace = mono;
 }
 
 //
@@ -229,7 +186,7 @@ static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 //  red component in the upper 5 bits, the green component in the middle 6 bits, and the
 //  blue component in the lower 5 bits.
 
-void lcd_blit(const uint16_t *pixels, uint16_t x, uint16_t y, uint16_t width, uint16_t height)
+void lcd_blit(const uint16_t *pixels, int x, int y, int width, int height)
 {
     lcd_disable_interrupts();
     if (y >= lcd_scroll_top && y < HEIGHT - lcd_scroll_bottom)
@@ -325,18 +282,18 @@ void lcd_scroll_clear()
     lcd_scroll_reset(); // Reset the scroll area to the top
 
     // Clear the scrolling area
-    lcd_solid_rectangle(background, 0, lcd_scroll_top, WIDTH, lcd_memory_scroll_height);
+    lcd_solid_rectangle(gBgCol, 0, lcd_scroll_top, WIDTH, lcd_memory_scroll_height);
 }
 
 // Scroll the screen up one line (make space at the bottom)
-void lcd_scroll_up()
+void lcd_scroll_up(uint8_t glyph_height)
 {
     // Ensure the scroll height is non-zero to avoid division by zero
     if (lcd_memory_scroll_height == 0) {
         return; // Exit early if the scroll height is invalid
     }
     // This will rotate the content in the scroll area up by one line
-    lcd_y_offset = (lcd_y_offset + GLYPH_HEIGHT) % lcd_memory_scroll_height;
+    lcd_y_offset = (lcd_y_offset + glyph_height) % lcd_memory_scroll_height;
     uint16_t scroll_area_start = lcd_scroll_top + lcd_y_offset;
 
     lcd_disable_interrupts();
@@ -345,18 +302,25 @@ void lcd_scroll_up()
     lcd_enable_interrupts();
 
     // Clear the new line at the bottom
-    lcd_solid_rectangle(background, 0, HEIGHT - GLYPH_HEIGHT, WIDTH, GLYPH_HEIGHT);
+    lcd_solid_rectangle(gBgCol, 0, HEIGHT - glyph_height, WIDTH, glyph_height);
+
+    if (gCursorY > glyph_height)
+        gCursorY -= glyph_height;
+    else
+        gCursorY = 0;
 }
 
 // Scroll the screen down one line (making space at the top)
 void lcd_scroll_down()
 {
+    const uint8_t glyph_height = font->Height;
+
     // Ensure lcd_memory_scroll_height is non-zero to avoid division by zero
     if (lcd_memory_scroll_height == 0) {
         return; // Safely exit if the scroll height is zero
     }
     // This will rotate the content in the scroll area down by one line
-    lcd_y_offset = (lcd_y_offset - GLYPH_HEIGHT + lcd_memory_scroll_height) % lcd_memory_scroll_height;
+    lcd_y_offset = (lcd_y_offset - glyph_height + lcd_memory_scroll_height) % lcd_memory_scroll_height;
     uint16_t scroll_area_start = lcd_scroll_top + lcd_y_offset;
 
     lcd_disable_interrupts();
@@ -365,7 +329,7 @@ void lcd_scroll_down()
     lcd_enable_interrupts();
 
     // Clear the new line at the top
-    lcd_solid_rectangle(background, 0, lcd_scroll_top, WIDTH, GLYPH_HEIGHT);
+    lcd_solid_rectangle(gBgCol, 0, lcd_scroll_top, WIDTH, glyph_height);
 }
 
 //
@@ -376,133 +340,126 @@ void lcd_scroll_down()
 void lcd_clear_screen()
 {
     lcd_scroll_reset(); // Reset the scrolling area to the top
-    lcd_solid_rectangle(background, 0, 0, WIDTH, FRAME_HEIGHT);
-}
-
-void lcd_erase_line(uint8_t row, uint8_t col_start, uint8_t col_end)
-{
-    lcd_solid_rectangle(background, col_start * font->width, row * GLYPH_HEIGHT, (col_end - col_start + 1) * font->width, GLYPH_HEIGHT);
-}
-
-
-// unpack the bits of a 5-pixel glyph row into a screen-format buffer
-// NB. 5 pix fonts are too wee for bold
-// returns the updated buffer ptr
-static uint16_t* unpack_glyph_row_5(uint16_t* buffer, uint16_t glyphRow)
-{
-    buffer[0] = (glyphRow & 0x10) ? foreground : background;
-    buffer[1] = (glyphRow & 0x08) ? foreground : background;
-    buffer[2] = (glyphRow & 0x04) ? foreground : background;
-    buffer[3] = (glyphRow & 0x02) ? foreground : background;
-    buffer[4] = (glyphRow & 0x01) ? foreground : background;
-
-    return buffer + 5;
-}
-
-// unpack the bits of an 8-pixel glyph row into a screen-format buffer
-// returns the updated buffer ptr
-static uint16_t* unpack_glyph_row_8(uint16_t* buffer, uint16_t glyphRow)
-{
-    buffer[0] = (glyphRow & 0x80) ? foreground : background;
-    buffer[1] = ((glyphRow & 0x40) || (bold && (glyphRow & 0x80))) ? foreground : background;
-    buffer[2] = ((glyphRow & 0x20) || (bold && (glyphRow & 0x40))) ? foreground : background;
-    buffer[3] = ((glyphRow & 0x10) || (bold && (glyphRow & 0x20))) ? foreground : background;
-    buffer[4] = ((glyphRow & 0x08) || (bold && (glyphRow & 0x10))) ? foreground : background;
-    buffer[5] = ((glyphRow & 0x04) || (bold && (glyphRow & 0x08))) ? foreground : background;
-    buffer[6] = ((glyphRow & 0x02) || (bold && (glyphRow & 0x04))) ? foreground : background;
-    buffer[7] = ((glyphRow & 0x01) || (bold && (glyphRow & 0x02))) ? foreground : background;
-
-    return buffer + 8;
-}
-
-// unpack the bits of a 10-pixel glyph row into a screen-format buffer
-// nb. the 10pix font we have doesn't support bold
-// returns the updated buffer ptr
-static uint16_t* unpack_glyph_row_10(uint16_t* buffer, uint16_t glyphRow)
-{
-    buffer[0] = (glyphRow & 0x200) ? foreground : background;
-    buffer[1] = (glyphRow & 0x100) ? foreground : background;
-    buffer[2] = (glyphRow & 0x080) ? foreground : background;
-    buffer[3] = (glyphRow & 0x040) ? foreground : background;
-    buffer[4] = (glyphRow & 0x020) ? foreground : background;
-    buffer[5] = (glyphRow & 0x010) ? foreground : background;
-    buffer[6] = (glyphRow & 0x008) ? foreground : background;
-    buffer[7] = (glyphRow & 0x004) ? foreground : background;
-    buffer[8] = (glyphRow & 0x002) ? foreground : background;
-    buffer[9] = (glyphRow & 0x001) ? foreground : background;
-
-    return buffer + 10;
-}
-
-// emit a horizontal line of pixels into a screen-format buffer
-// returns the updated buffer ptr
-static uint16_t* emit_hline(uint16_t* buffer, int length, uint16_t colour)
-{
-    for (int i=0; i<length; ++i)
-        *(buffer++) = colour;
-    
-    return buffer;
+    lcd_solid_rectangle(gBgCol, 0, 0, WIDTH, FRAME_HEIGHT);
 }
 
 
 // Draw a character at the specified position
-void lcd_putc(uint8_t column, uint8_t row, uint8_t c)
+// returns the width of the drawn character
+uint8_t lcd_putc(int x, int y, uint8_t c)
 {
-    const int bytes_per_glyph = (font->width + 7) / 8;
-    const uint8_t *glyph = &font->glyphs[c * GLYPH_HEIGHT * bytes_per_glyph];
-    uint16_t *buffer = char_buffer;
+    const int glyph_width = font->Width;
+    const int glyph_height = font->Height;
+    font_rasterise_char(font, c, gFgCol, gBgCol, char_buffer, glyph_width, glyph_height, 0, 0);
 
-    // The last row is where the underscore is drawn, but if no underscore is set, fill with glyph data
-    const int glyph_rows = underscore ? (GLYPH_HEIGHT-1) : GLYPH_HEIGHT;
-    if (font->width == 10)
+    const GlyphMetric metric = font_get_glyph_metric(font, c, gMonospace);
+
+    // if we have any skipping/shrinking to do, do that inplace
+    if (metric.Skip > 0 || metric.Advance < glyph_width)
     {
-        for (uint8_t i = 0; i < glyph_rows; i++, glyph += bytes_per_glyph)
+        uint16_t* dest = char_buffer;
+        const uint16_t* src = char_buffer + metric.Skip;
+        for (int row = 0; row < glyph_height; ++row)
         {
-            uint16_t glyphRow = (((uint16_t)glyph[0]) << 8) | (glyph[1]);
-            buffer = unpack_glyph_row_10(buffer, glyphRow);
-        }
-    }
-    else if (font->width == 8)
-    {
-        for (uint8_t i = 0; i < glyph_rows; i++, glyph += bytes_per_glyph)
-        {
-            buffer = unpack_glyph_row_8(buffer, *glyph);
-        }
-    }
-    else
-    {
-        for (uint8_t i = 0; i < glyph_rows; i++, glyph += bytes_per_glyph)
-        {
-            buffer = unpack_glyph_row_5(buffer, *glyph);
+            memmove(dest, src, metric.Advance * sizeof(*src));
+            dest += metric.Advance;
+            src += glyph_width;
         }
     }
 
-    if (underscore)
-        buffer = emit_hline(buffer, font->width, foreground);
+    lcd_blit(char_buffer, x, y, metric.Advance, glyph_height);
 
-    lcd_blit(char_buffer, column * font->width, row * GLYPH_HEIGHT, font->width, GLYPH_HEIGHT);
+    return metric.Advance;
 }
 
 // Draw a string at the specified position
 // handles wrapping at edge of screen back to _column_
-void lcd_putstr(uint8_t column, uint8_t row, const char *str)
+void lcd_putstr(int x, int y, const char *str)
 {
-    const int start_col = column;
-    const int num_cols = lcd_get_columns();
-    if (column >= num_cols)
+    if (x >= WIDTH)
         return;
 
-    for (; *str; ++str, ++column)
+    for (; *str; ++str)
     {
-        if (column >= num_cols)
-        {
-            ++row;
-            column = start_col;
-        }
-
-        lcd_putc(column, row, *str);
+        const uint8_t advance = lcd_putc(x, y, *str);
+        lcd_inc_column(advance);
     }
 }
+
+void lcd_inc_column(uint8_t advance)
+{
+    gCursorX += advance;
+
+    gColWidths[gCurrColIx] = advance;
+    ++gCurrColIx;
+
+    if (gCursorX >= WIDTH || gCurrColIx >= MAX_COLS)
+    {
+        gCursorX = 0;
+        gCursorY += font->Height;
+
+        // TODO: this breaks backspace from one line to the previous
+        // ideally we'd remember the start ix of each line and only reset when flushing
+        gCurrColIx = 0;
+    }
+}
+
+void lcd_backspace()
+{
+    if (gCurrColIx <= 0)
+        return;
+
+    lcd_erase_cursor();
+
+    --gCurrColIx;
+
+    const int glyphWidth = gColWidths[gCurrColIx];
+    gCursorX -= glyphWidth;
+
+    lcd_solid_rectangle(gBgCol, gCursorX, gCursorY, glyphWidth, font->Height);
+
+    lcd_draw_cursor();
+}
+
+
+static void lcd_next_line()
+{
+    const int glyph_height = font->Height;
+    gCursorY += glyph_height;
+
+    while (gCursorY >= (HEIGHT - glyph_height))
+        lcd_scroll_up(glyph_height);
+}
+
+
+void lcd_emit(char c)
+{
+    lcd_erase_cursor(); // erase the cursor before processing the character
+
+    switch (c)
+    {
+    case CHR_BS:
+        lcd_backspace();
+        break;
+
+    case '\n':
+        gCurrColIx = 0;
+        gCursorX = 0;
+        lcd_next_line();
+
+    default:
+        if (c >= 0x20 && c < 0x7F) // printable characters
+        {
+            const uint8_t advance = lcd_putc(gCursorX, gCursorY, c);
+            lcd_inc_column(advance);
+        }
+        break;
+    }
+
+    // Update cursor position
+    lcd_draw_cursor(); // draw the cursor at the new position
+}
+
 
 
 //
@@ -517,8 +474,6 @@ void lcd_putstr(uint8_t column, uint8_t row, const char *str)
 // cursor when printing these if you want to see the box drawing glyphs
 // uncorrupted.
 
-static uint8_t cursor_column = 0;  // cursor x position for drawing
-static uint8_t cursor_row = 0;     // cursor y position for drawing
 static bool cursor_enabled = true; // cursor visibility state
 
 // Enable or disable the cursor
@@ -535,38 +490,24 @@ bool lcd_cursor_enabled()
     return cursor_enabled;
 }
 
-// Move the cursor to the specified position
-// This function updates the cursor position and ensures it is within the bounds of the display.
-void lcd_move_cursor(uint8_t column, uint8_t row)
+static void blit_cursor(uint16_t col)
 {
-    uint8_t max_col = lcd_get_columns() - 1;
-    // Move the cursor to the specified position
-    cursor_column = column;
-    cursor_row = row;
+    if (!cursor_enabled)
+        return;
 
-    // Ensure the cursor position is within bounds
-    if (cursor_column > max_col)
-        cursor_column = max_col;
-    if (cursor_row > MAX_ROW)
-        cursor_row = MAX_ROW;
+    lcd_solid_rectangle(col, gCursorX, gCursorY + font->Height - 1, font->Width, 1);
 }
 
 // Draw the cursor at the current position
 void lcd_draw_cursor()
 {
-    if (cursor_enabled)
-    {
-        lcd_solid_rectangle(foreground, cursor_column * font->width, ((cursor_row + 1) * GLYPH_HEIGHT) - 1, font->width, 1);
-    }
+    blit_cursor(gFgCol);
 }
 
 // Erase the cursor at the current position
 void lcd_erase_cursor()
 {
-    if (cursor_enabled)
-    {
-        lcd_solid_rectangle(background, cursor_column * font->width, ((cursor_row + 1) * GLYPH_HEIGHT) - 1, font->width, 1);
-    }
+    blit_cursor(gBgCol);
 }
 
 //

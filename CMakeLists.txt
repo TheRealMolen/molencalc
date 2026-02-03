@@ -36,11 +36,7 @@ pico_sdk_init()
 
 add_executable(molencalc
         main.c
-        drivers/display.c
-        drivers/display.h
-        drivers/font-5x10.c
-        drivers/font-10x16.c
-        drivers/font.h
+
         drivers/keyboard.c
         drivers/keyboard.h
         drivers/lcd.c
@@ -49,11 +45,18 @@ add_executable(molencalc
         drivers/picocalc.h
         drivers/southbridge.c
         drivers/southbridge.h
+
         libcalc/expr.cpp
+        libcalc/font.cpp
         libcalc/funcs.cpp
         libcalc/libcalc.cpp
+        libcalc/maths.cpp
         libcalc/parser.cpp
+        libcalc/plot.cpp
         libcalc/symbols.cpp
+
+        libcalc/fonts/font-5x10.c
+        libcalc/fonts/font-10x16.c
         )
 
 pico_set_program_name(molencalc "molencalc")
@@ -77,6 +80,7 @@ target_link_libraries(molencalc
 # Add the standard include files to the build
 target_include_directories(molencalc PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/libcalc
 )
 
 # Add any user requested libraries

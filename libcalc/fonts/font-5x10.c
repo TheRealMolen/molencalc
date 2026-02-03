@@ -5,12 +5,14 @@
 //
 //  https://github.com/idispatch/raster-fonts/blob/master/font-5x8.c
 //
+// *** modified by molen to add more flexible font support ***
 
-#include "font.h"
+#include "../font.h"
 
-const font_t font_5x10 = {
-    .width = 5,
-    .glyphs = {
+const Font font_5x10 = {
+    .Width = 5,
+    .Height = 10,
+    .Glyphs = {
         // 0x00
         0b00000,
         0b00000,

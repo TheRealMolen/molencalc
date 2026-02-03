@@ -2,7 +2,7 @@
 #include "pico/stdlib.h"
 #include "pico/stdio/driver.h"
 
-#include "display.h"
+#include "lcd.h"
 #include "keyboard.h"
 #include "southbridge.h"
 #include "serial.h"
@@ -15,7 +15,7 @@ static void picocalc_out_chars(const char *buf, int length)
 {
     for (int i = 0; i < length; ++i)
     {
-        display_emit(buf[i]);
+        lcd_emit(buf[i]);
     }
 }
 
@@ -63,7 +63,7 @@ stdio_driver_t picocalc_stdio_driver = {
 void picocalc_init()
 {
     sb_init();
-    display_init();
+    lcd_init();
     keyboard_init();
     keyboard_set_key_available_callback(picocalc_chars_available_notify);
     keyboard_set_background_poll(true);
