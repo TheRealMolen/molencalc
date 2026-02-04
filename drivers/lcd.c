@@ -456,30 +456,50 @@ void lcd_emit(char c)
         break;
     }
 
-    // Update cursor position
-    lcd_draw_cursor(); // draw the cursor at the new position
+    lcd_draw_cursor();
 }
 
 
 void lcd_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh) 
-{ 
-    // scroll up enough so there's at least imgh pixels free to draw on 
-    // nb. we're over-clearing the back buf at this point as we're about to blat over a chunk with the img 
-    int line_btm = gCursorY; 
-    int img_top = HEIGHT - imgh; 
-    if (line_btm > img_top) 
-    { 
-        lcd_scroll_up(line_btm - img_top); 
-        line_btm = gCursorY; 
+{
+    lcd_erase_cursor();
+
+    // we draw the image in fixed-size chunks
+    // partly because it makes it animate nice, and partly because 
+    // figuring out the appropriate logic to wrap the image around the frame
+    // is more effort than i'm interested in :)
+    uint32_t height_remaining = imgh;
+    const uint32_t chunk_height = 16;
+
+    const uint16_t* next_pixels = pixels;
+
+    while (height_remaining > 0)
+    {
+        uint32_t height = (height_remaining > chunk_height) ? chunk_height : height_remaining;
+
+        // scroll up enough so there's at least imgh pixels free to draw on 
+        // nb. we're over-clearing the back buf at this point as we're about to blat over a chunk with the img 
+        int line_btm = gCursorY; 
+        int img_top = HEIGHT - height; 
+        if (line_btm > img_top) 
+        { 
+            lcd_scroll_up(line_btm - img_top); 
+            line_btm = gCursorY; 
+        }
+        if (img_top > line_btm)
+            img_top = line_btm;
+
+        const int img_left = (int)(WIDTH - imgw - 1);
+
+        lcd_blit(next_pixels, img_left, img_top, imgw, height);
+    
+        gCursorY += height;
+        height_remaining -= height;
+        next_pixels += imgw * height;
     }
-    if (img_top > line_btm)
-        img_top = line_btm;
 
-    const int img_left = (int)(WIDTH - imgw - 1);
-
-    lcd_blit(pixels, img_left, img_top, imgw, imgh);
- 
-    gCursorY += imgh;
+    // note: leave the cursor undrawn here as it can interfere with the next line of text
+    //lcd_draw_cursor();
 } 
  
 
