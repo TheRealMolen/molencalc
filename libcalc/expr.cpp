@@ -118,13 +118,18 @@ double parse_unary(ParseCtx& ctx)
     return parse_exponent(ctx);
 }
 
-// mul ::= unary | mul "*" unary | mul "/" unary
+// mul ::= unary | mul "*" unary | mul "/" unary | unary mul
 double parse_mul(ParseCtx& ctx)
 {
+    bool allowed_implicit_mul = peek(ctx, Token::Number) || peek(ctx, Token::LParen);
+
     double val = parse_unary(ctx);
 
+    bool had_infix = false;
     while (!ctx.Error && (peek(ctx, Token::Times) || peek(ctx, Token::Divide)))
     {
+        had_infix = true;
+
         if (accept(ctx, Token::Times))
         {
             val = val * parse_unary(ctx);
@@ -132,6 +137,15 @@ double parse_mul(ParseCtx& ctx)
         else if (accept(ctx, Token::Divide))
         {
             val = val / parse_unary(ctx);
+        }
+    }
+
+    // 2pi / (1+4)(3sin(x)) case
+    if (allowed_implicit_mul && !had_infix)
+    {
+        if (peek(ctx, Token::Symbol) || peek(ctx, Token::LParen))
+        {
+            val *= parse_mul(ctx);
         }
     }
 

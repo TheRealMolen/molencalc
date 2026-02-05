@@ -367,7 +367,9 @@ uint8_t lcd_putc(int x, int y, uint8_t c)
         }
     }
 
-    lcd_blit(char_buffer, x, y, metric.Advance, glyph_height);
+    // the buf width is the smaller of the glyph_width and Advance
+    const int bufw = (glyph_width < metric.Advance) ? glyph_width : metric.Advance;
+    lcd_blit(char_buffer, x, y, bufw, glyph_height);
 
     return metric.Advance;
 }
@@ -459,28 +461,35 @@ void lcd_emit(char c)
     lcd_draw_cursor();
 }
 
+void lcd_emit_str(const char* s)
+{
+    if (!s)
+        return;
+    
+    for (; *s; ++s)
+        lcd_emit(*s);
+}
+
 
 void lcd_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh) 
 {
     lcd_erase_cursor();
 
-    // we draw the image in fixed-size chunks
+    // we draw the image line-by-line
     // partly because it makes it animate nice, and partly because 
     // figuring out the appropriate logic to wrap the image around the frame
     // is more effort than i'm interested in :)
     uint32_t height_remaining = imgh;
-    const uint32_t chunk_height = 16;
 
     const uint16_t* next_pixels = pixels;
-
     while (height_remaining > 0)
     {
-        uint32_t height = (height_remaining > chunk_height) ? chunk_height : height_remaining;
+        uint32_t line_height = 1;
 
         // scroll up enough so there's at least imgh pixels free to draw on 
         // nb. we're over-clearing the back buf at this point as we're about to blat over a chunk with the img 
         int line_btm = gCursorY; 
-        int img_top = HEIGHT - height; 
+        int img_top = HEIGHT - line_height; 
         if (line_btm > img_top) 
         { 
             lcd_scroll_up(line_btm - img_top); 
@@ -491,11 +500,11 @@ void lcd_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh)
 
         const int img_left = (int)(WIDTH - imgw - 1);
 
-        lcd_blit(next_pixels, img_left, img_top, imgw, height);
+        lcd_blit(next_pixels, img_left, img_top, imgw, line_height);
     
-        gCursorY += height;
-        height_remaining -= height;
-        next_pixels += imgw * height;
+        gCursorY += line_height;
+        height_remaining -= line_height;
+        next_pixels += imgw * line_height;
     }
 
     // note: leave the cursor undrawn here as it can interfere with the next line of text

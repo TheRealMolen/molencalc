@@ -46,6 +46,7 @@ add_executable(molencalc
         drivers/southbridge.c
         drivers/southbridge.h
 
+        libcalc/cmd.cpp
         libcalc/expr.cpp
         libcalc/font.cpp
         libcalc/funcs.cpp

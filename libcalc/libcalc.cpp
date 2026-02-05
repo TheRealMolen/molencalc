@@ -1,5 +1,6 @@
 #include "libcalc.h"
 
+#include "cmd.h"
 #include "expr.h"
 #include "funcs.h"
 #include "parser.h"
@@ -8,6 +9,18 @@
 
 #include <cstdio>
 #include <cstring>
+
+//-------------------------------------------------------------------------------------------------
+
+calc_puts_func calc_puts_fn;
+
+void calc_puts(const char* str)
+{
+    if (calc_puts_fn)
+    {
+        calc_puts_fn(str);
+    }
+}
 
 //-------------------------------------------------------------------------------------------------
 
@@ -76,8 +89,8 @@ bool parse_axis(ParseCtx& ctx, PlotAxis& axis)
 }
 
 
-// :g f -pi<x<pi, -1<y<1
-// cmd_graph ::= ":" "g" symbol [axis ["," axis]]
+// g f -pi<x<pi, -1<y<1
+// cmd_graph ::= "g" symbol [axis ["," axis]]
 bool cmd_graph_y(ParseCtx& ctx)
 {
     char func_name[kMaxSymbolLength+1];
@@ -126,8 +139,8 @@ bool cmd_graph_y(ParseCtx& ctx)
 
 //-------------------------------------------------------------------------------------------------
 
-// :let x=3
-// cmd_let ::= ":" "let" symbol "equals" expression
+// let x=3
+// cmd_let ::= "let" symbol "equals" expression
 bool cmd_let(ParseCtx& ctx)
 {
     char symbol[kMaxSymbolLength+1];
@@ -148,44 +161,37 @@ bool cmd_let(ParseCtx& ctx)
 
 //-------------------------------------------------------------------------------------------------
 
-bool cmd_help(ParseCtx& ctx)
+bool try_parse_command(ParseCtx& ctx)
 {
-    const char* helpText =
-R"(commands start with :
-graph of y=f(x)
-  :g fn [lo<x<hi] [lo<y<hi]
-set named val
-  :let x=expr
-)";
+    if (!peek(ctx, Token::Symbol))
+        return false;
 
-    if (strlen(helpText) < size_t(ctx.ResBufferLen))
-        strcpy(ctx.ResBuffer, helpText);
-    else
-        strcpy(ctx.ResBuffer, "error: too much help for buf");
+    const CommandDef* cmd = lookup_command(ctx.TokenSymbol);
+    if (!cmd)
+        return false;
 
-    return true;
+    // eat the command name symbol
+    expect(ctx, Token::Symbol);
+
+    if (cmd->Func)
+        return cmd->Func(ctx.InBuffer + ctx.CurrIx);
+    if (cmd->PFunc)
+        return cmd->PFunc(ctx);
+
+    on_parse_error(ctx, "corrupt command");
+    return false;
 }
 
 //-------------------------------------------------------------------------------------------------
 
-bool parse_command(ParseCtx& ctx)
+void calc_init(calc_puts_func puts_func)
 {
-    if (!expect(ctx, Token::Assign))
-        return false;
+    calc_puts_fn = puts_func;
 
-    char cmd[kMaxSymbolLength+1];
-    if (!expect_symbol(ctx, cmd))
-        return false;
+    init_commands();
 
-    if (strcmp(cmd, "g") == 0)
-        return cmd_graph_y(ctx);
-    if (strcmp(cmd, "let") == 0)
-        return cmd_let(ctx);
-    if ((strcmp(cmd, "help") == 0) || (strcmp(cmd, "h") == 0))
-        return cmd_help(ctx);
-
-    on_parse_error(ctx, "unknown command");
-    return false;
+    register_calc_cmd(cmd_graph_y, "g", "g fn [lo<x<hi] [, lo<y<hi]", "graph of y=fn(x)");
+    register_calc_cmd(cmd_let, "let", "let var=expr", "set <var> to <expr>");
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -200,36 +206,32 @@ bool calc_eval(const char* expr, char* resBuffer, int resBufferLen)
     advance_token(parseCtx);
 
     // scan the expression to see if it's something unusual
-    const bool isCommand = expr && expr[0] == ':';
     const bool isStatement = (strstr(expr, "->") != nullptr);
-    const bool isExpression = !isCommand && !isStatement;
 
+    bool shouldPrintResult = false;
     double result = 0.0;
 
     if (isStatement && parse_statement(parseCtx))
     {
         strcpy(resBuffer, "  ok.");
     }
-    else if (isCommand)
+    else if (try_parse_command(parseCtx))
     {
         // commands are expected to manage their own feedback
-        parse_command(parseCtx);
     }
-    else if (isExpression)
+    else
     {
         result = parse_expression(parseCtx);
+        shouldPrintResult = !parseCtx.Error;
     }
 
     if (!accept(parseCtx, Token::Eof))
         on_parse_error(parseCtx, "trailing nonsense");
     
-    if (parseCtx.Error)
-        return false;
-
-    if (isExpression)
+    if (shouldPrintResult)
         dtostr_human(result, resBuffer, resBufferLen);
 
-    return true;
+    return !parseCtx.Error;
 }
 
 

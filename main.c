@@ -70,6 +70,29 @@ void readline(char *buffer, size_t size)
 }
 
 
+//-------------------------------------------------------------------------------------------------
+
+static bool cmd_bye(const char*)
+{
+    rom_reset_usb_boot(0, 0);
+    return true;
+}
+
+static bool cmd_big(const char*)
+{
+    lcd_set_font(&font_10x16);
+    return true;
+}
+
+static bool cmd_small(const char*)
+{
+    lcd_set_font(&font_5x10);
+    return true;
+}
+
+//-------------------------------------------------------------------------------------------------
+
+
 int main()
 {
     char inputBuf[256];
@@ -77,7 +100,12 @@ int main()
 
     init_platform();
 
-    printf("molencalc v15      don't panic\n");
+    calc_init(lcd_emit_str);
+    register_calc_cmd(cmd_big, "big", "", "switches to big text");
+    register_calc_cmd(cmd_small, "small", "", "switches to small text");
+    register_calc_cmd(cmd_bye, "bye", "", "resets to BOOTSEL");
+
+    printf(MCALC_WELCOME);
 
     for (;;)
     {
@@ -87,23 +115,10 @@ int main()
         if (strlen(inputBuf) == 0)
             continue; // Skip empty input
 
-        // 'bye' on the command line reboots to BOOTSEL mode
-        if (strcmp(inputBuf, "bye") == 0)
-        {
-            rom_reset_usb_boot(0, 0);
-            return 0;
-        }
-        else if (strcmp(inputBuf, "big") == 0)
-        {
-            lcd_set_font(&font_10x16);
-            continue;
-        }
-        else if (strcmp(inputBuf, "small") == 0)
-        {
-            lcd_set_font(&font_5x10);
-            continue;
-        }
+        reset_plot();
 
+        lcd_erase_cursor();
+        
         calc_eval(inputBuf, outputBuf, sizeof(outputBuf));
         puts(outputBuf);
 
@@ -111,7 +126,6 @@ int main()
         if (plot)
         {
             lcd_put_image(plot->Pixels, MC_PLOT_WIDTH, MC_PLOT_HEIGHT);
-            reset_plot();
         }
     }
 }

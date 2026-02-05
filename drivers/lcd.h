@@ -123,6 +123,7 @@ void lcd_inc_column(uint8_t advance);
 void lcd_backspace();
 
 void lcd_emit(char c);
+void lcd_emit_str(const char* s);
 void lcd_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh);
 
 void lcd_move_cursor(uint8_t x, uint8_t y);

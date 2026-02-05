@@ -27,6 +27,24 @@ static_assert((sizeof(kTokenNames) / sizeof(kTokenNames[0])) == size_t(Token::CO
 
 //-------------------------------------------------------------------------------------------------
 
+inline bool is_symbol_char(char c, bool leading)
+{
+    if ((c >= 'A' && c <= 'Z') || ((c >= 'a') && (c <= 'z')))
+        return true;
+    if (c == '_')
+        return true;
+
+    if (leading)
+        return false;
+
+    if (c >= '0' && c <= '9')
+        return true;
+
+    return false;
+}
+
+//-------------------------------------------------------------------------------------------------
+
 void on_parse_error(ParseCtx& ctx, const char* msg)
 {
     // only one error at a time pls
@@ -110,39 +128,27 @@ void parse_number(ParseCtx& ctx)
 
     // handle scale units
     const char c = ctx.InBuffer[ctx.CurrIx];
-    switch (c)
+    const char nc = c ? ctx.InBuffer[ctx.CurrIx+1] : 0;
+    if (c && !is_symbol_char(nc, false))
     {
-    case 'G':   ctx.TokenNumber *= 1.0e9;     break;
-    case 'M':   ctx.TokenNumber *= 1.0e6;     break;
-    case 'k':   ctx.TokenNumber *= 1.0e3;     break;
-    case 'm':   ctx.TokenNumber *= 1.0e-3;    break;
-    case 'u':   ctx.TokenNumber *= 1.0e-6;    break;
-    case 'n':   ctx.TokenNumber *= 1.0e-9;    break;
-    case 'p':   ctx.TokenNumber *= 1.0e-12;   break;
-    default:
-        return; // no suffix; don't increment CurrIx
-    }
+        switch (c)
+        {
+        case 'G':   ctx.TokenNumber *= 1.0e9;     break;
+        case 'M':   ctx.TokenNumber *= 1.0e6;     break;
+        case 'k':   ctx.TokenNumber *= 1.0e3;     break;
+        case 'm':   ctx.TokenNumber *= 1.0e-3;    break;
+        case 'u':   ctx.TokenNumber *= 1.0e-6;    break;
+        case 'n':   ctx.TokenNumber *= 1.0e-9;    break;
+        case 'p':   ctx.TokenNumber *= 1.0e-12;   break;
+        default:
+            return; // no suffix; don't increment CurrIx
+        }
 
-    ++ctx.CurrIx;
+        ++ctx.CurrIx;
+    }
 }
 
 //-------------------------------------------------------------------------------------------------
-
-inline bool is_symbol_char(char c, bool leading)
-{
-    if ((c >= 'A' && c <= 'Z') || ((c >= 'a') && (c <= 'z')))
-        return true;
-    if (c == '_')
-        return true;
-
-    if (leading)
-        return false;
-
-    if (c >= '0' && c <= '9')
-        return true;
-
-    return false;
-}
 
 char to_lower_sym(char c)
 {
