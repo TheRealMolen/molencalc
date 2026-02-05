@@ -86,10 +86,13 @@ You can also define your own named functions using a "mapping" notation:
 Once you've defined a function, you can graph it with the `g` command: 
 `g <func_name> [axis [, axis]]`:
 
-![g f](https://github.com/TheRealMolen/molencalc/blob/main/assets/graph1.jpg?raw=true)
-![g f -20<x<20](https://github.com/TheRealMolen/molencalc/blob/main/assets/graph2.jpg?raw=true)
-![g f -20<x<20 -0.5<y<1.2](https://github.com/TheRealMolen/molencalc/blob/main/assets/graph3.jpg?raw=true)
+![g f](https://github.com/TheRealMolen/molencalc/blob/main/assets/graph1.png?raw=true)
 
+You can optionally specify axis ranges for the x and/or y axes with the format
+`lo < axis < hi`. For instance:
+
+![g f -20<x<20](https://github.com/TheRealMolen/molencalc/blob/main/assets/graph2.png?raw=true)
+![g f -20<x<20 -0.5<y<1.2](https://github.com/TheRealMolen/molencalc/blob/main/assets/graph3.png?raw=true)
 
 
 ## internals
