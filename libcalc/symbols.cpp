@@ -129,3 +129,69 @@ void undef_value(const char* name)
 
 //-----------------------------------------------------------------------------------------------
 
+BuiltinSymbolIt symbol_builtin_begin()
+{
+    return gSymbols;
+}
+
+BuiltinSymbolIt symbol_next(BuiltinSymbolIt it)
+{
+    if (!it)
+        return nullptr;
+
+    ++it;
+    if (it >= gSymbols + kNumSymbols)
+        return nullptr;
+
+    return it;
+}
+
+const char* symbol_name(BuiltinSymbolIt it)
+{
+    if (!it)
+        return "<null>";
+
+    return it->Name;
+}
+
+UserSymbolIt symbol_user_begin()
+{
+    UserSymbolIt it = gUserSymbols;
+
+    if (!it->IsUsed)
+        it = symbol_next(it);
+
+    return it;
+}
+
+UserSymbolIt symbol_next(UserSymbolIt it)
+{
+    if (!it)
+        return nullptr;
+
+    for (++it; it < gUserSymbols + kMaxUserSymbols; ++it)
+    {
+        if (it->IsUsed)
+            return it;
+    }
+
+    return nullptr;
+}
+
+const char* symbol_name(UserSymbolIt it)
+{
+    if (!it)
+        return "<null>";
+
+    return it->Name;
+}
+
+double symbol_val(UserSymbolIt it)
+{
+    if (!it)
+        return 1.0 / 0.0;
+
+    return it->Value;
+}
+
+//-----------------------------------------------------------------------------------------------

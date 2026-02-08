@@ -49,6 +49,7 @@ add_executable(molencalc
         libcalc/cmd.cpp
         libcalc/expr.cpp
         libcalc/font.cpp
+        libcalc/format.cpp
         libcalc/funcs.cpp
         libcalc/libcalc.cpp
         libcalc/maths.cpp

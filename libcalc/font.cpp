@@ -14,20 +14,30 @@ GlyphMetric font_get_glyph_metric(const Font* font, char c, bool monospace)
 
     if (font == &font_10x16)
     {
+        if (c == ' ')
+            return { .Skip = 0, .Advance = uint8_t(glyphWidth - 2) };
         if (c == '\'' || c == '.' || c == ',')
             return { .Skip = 3, .Advance = uint8_t(glyphWidth - 7) };
         if (c == ';' || c == ':')
             return { .Skip = 2, .Advance = uint8_t(glyphWidth - 5) };
-        if (c == 'i' || c == 'l' || c == '1')
+        if (c == 'i')
+            return { .Skip = 1, .Advance = uint8_t(glyphWidth - 4) };
+        if (c == 'l' || c == '1')
             return { .Skip = 2, .Advance = uint8_t(glyphWidth - 4) };
         if (c == 'f' || c == 't' || c == '^')
             return { .Skip = 1, .Advance = uint8_t(glyphWidth - 2) };
+        if (c == 'r')
+            return { .Skip = 0, .Advance = uint8_t(glyphWidth - 1) };
+        if (c == 'k')
+            return { .Skip = 0, .Advance = uint8_t(glyphWidth - 2) };
     }
     else if (font == &font_5x10)
     {
-        if (c == 'm' || c == '/' || c == 'w' || c == 'v' || c == 'W' || c == 'V')
+        if (c == ' ')
+            return { .Skip = 0, .Advance = uint8_t(glyphWidth - 1) };
+        if (c == 'm' || c == '/' || c == 'w' || c == 'v' || c == 'W' || c == 'V' || c == 'x')
             return { .Skip = 0, .Advance = uint8_t(glyphWidth + 1) };
-        if (c == 'l' || c == 'I' || c == '1')
+        if (c == 'l' || c == 'I' || c == '1' || c == 'i')
             return { .Skip = 1, .Advance = uint8_t(glyphWidth - 1) };
     }
 

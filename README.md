@@ -52,27 +52,29 @@ a constant/function you're missing, and hopefully it'll be in the next release.
 > sin(ln(e))
   = 0.84147098
 ```
-**Note that functions always need `( )` parentheses around their arguments**
+**Note that functions always need `[ ]` parentheses around their arguments**
+
+**Also Note: for ease of entry on PicoCalc, any of `{[(` and `}])` can be used interchangeably**
 
 ### variables
 
-For convenience, you can store values in named variables with `let`:
+For convenience, you can store values in named variables:
 ```
-> let x=3/2
-> let y=pi
+> x=3/2
+> y=pi
 > sin(x*y)
   = -1.000
 
-> let y=-pi
+> y=-pi
 > sin(x*y)
   = 1.000
 ```
 
 ### user functions
 
-You can also define your own named functions using a "mapping" notation:
+You can also define your own named functions:
 ```
-> myfunc: x -> sin(x^2)
+> myfunc(x) = sin(x^2)
 > myfunc(2)
   = -0.75680250
 ```
@@ -80,6 +82,9 @@ You can also define your own named functions using a "mapping" notation:
 **Note: at the moment, all user functions map exactly one number to another - you can't use 
   multiple function parameters**
 
+#### `list`
+
+You can use the `list` command to see all the built-in and user-defined functions and variables
 
 ### graphing
 

@@ -20,3 +20,20 @@ const UserFunction* lookup_user_func(const char* name);
 
 //-------------------------------------------------------------------------------------------------
 
+struct FunctionDef;
+using BuiltinFunctionIt = const FunctionDef*;
+
+struct UserFunction;
+using UserFunctionIt = const UserFunction*;
+
+BuiltinFunctionIt function_builtin_begin();
+BuiltinFunctionIt function_next(BuiltinFunctionIt it);
+const char* function_name(BuiltinFunctionIt it);
+
+UserFunctionIt function_user_begin();
+UserFunctionIt function_next(UserFunctionIt it);
+const char* function_name(UserFunctionIt it);
+const char* function_def(UserFunctionIt it);
+
+//-------------------------------------------------------------------------------------------------
+

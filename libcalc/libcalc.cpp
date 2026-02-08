@@ -2,12 +2,12 @@
 
 #include "cmd.h"
 #include "expr.h"
+#include "format.h"
 #include "funcs.h"
 #include "parser.h"
 #include "plot.h"
 #include "symbols.h"
 
-#include <cstdio>
 #include <cstring>
 
 //-------------------------------------------------------------------------------------------------
@@ -24,41 +24,59 @@ void calc_puts(const char* str)
 
 //-------------------------------------------------------------------------------------------------
 
-void dtostr_human(double d, char* s, int sLen)
-{
-    snprintf(s, sLen, "  = %.8g", d);
-}
-
-//-------------------------------------------------------------------------------------------------
-
-// f: x-> expression
-// statement ::= symbol ":" symbol "->" expression
-// todo: arg list as symbol_list
-bool parse_statement(ParseCtx& ctx)
+// assignment ::= "->" | "="
+// f[x] assignment expression
+// x assignment expression
+// definition ::= symbol [lparen symbol rparen] assignment expression
+bool parse_definition(ParseCtx& ctx)
 {
     char name[kMaxSymbolLength+1];
+
+    bool isFunction = false;
     char arg[kMaxSymbolLength+1];
 
     if (!expect_symbol(ctx, name))
         return false;
-    if (!expect(ctx, Token::Assign))
-        return false;
-    if (!expect_symbol(ctx, arg))
-        return false;
-    if (!peek(ctx, Token::Map))
+
+    if (accept(ctx, Token::LParen))
+    {
+        isFunction = true;
+
+        if (!expect_symbol(ctx, arg))
+            return false;
+        if (!expect(ctx, Token::RParen))
+            return false;
+    }
+
+    // we need to cache the pointer to the rest of the string now before we advance token
+    // otherwise the function def will miss the first token
+    const char* postAssignBuf = ctx.InBuffer + ctx.CurrIx;
+
+    if (!accept(ctx, Token::Map) && !expect(ctx, Token::Equals))
         return false;
 
-    // the remainder of the expression becomes the registered implementation of function <name>
-    ParseCtx innerCtx {
-        .InBuffer = ctx.InBuffer + ctx.CurrIx,
-        .ResBuffer = ctx.ResBuffer,
-        .ResBufferLen = ctx.ResBufferLen
-    };
-    if (!define_function(name, arg, innerCtx))
-        return false;
+    if (isFunction)
+    {
+        // the remainder of the expression becomes the registered implementation of function <name>
+        ParseCtx innerCtx {
+            .InBuffer = postAssignBuf,
+            .ResBuffer = ctx.ResBuffer,
+            .ResBufferLen = ctx.ResBufferLen
+        };
+        if (!define_function(name, arg, innerCtx))
+            return false;
 
-    // we've eaten all the rest of the input
-    ctx.NextToken = Token::Eof;
+        // we've eaten all the rest of the input
+        ctx.NextToken = Token::Eof;
+    }
+    else
+    {
+        const double val = parse_expression(ctx);
+        if (ctx.Error)
+            return false;
+
+        return define_value(name, val, ctx);
+    }
 
     return true;
 }
@@ -139,28 +157,6 @@ bool cmd_graph_y(ParseCtx& ctx)
 
 //-------------------------------------------------------------------------------------------------
 
-// let x=3
-// cmd_let ::= "let" symbol "equals" expression
-bool cmd_let(ParseCtx& ctx)
-{
-    char symbol[kMaxSymbolLength+1];
-    if (!expect_symbol(ctx, symbol))
-    {
-        on_parse_error(ctx, "need symbol name");
-        return false;
-    }
-    if (!expect(ctx, Token::Equals))
-        return false;
-
-    const double val = parse_expression(ctx);
-    if (ctx.Error)
-        return false;
-
-    return define_value(symbol, val, ctx);
-}
-
-//-------------------------------------------------------------------------------------------------
-
 bool try_parse_command(ParseCtx& ctx)
 {
     if (!peek(ctx, Token::Symbol))
@@ -191,7 +187,6 @@ void calc_init(calc_puts_func puts_func)
     init_commands();
 
     register_calc_cmd(cmd_graph_y, "g", "g fn [lo<x<hi] [, lo<y<hi]", "graph of y=fn(x)");
-    register_calc_cmd(cmd_let, "let", "let var=expr", "set <var> to <expr>");
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -206,12 +201,12 @@ bool calc_eval(const char* expr, char* resBuffer, int resBufferLen)
     advance_token(parseCtx);
 
     // scan the expression to see if it's something unusual
-    const bool isStatement = (strstr(expr, "->") != nullptr);
+    const bool isDefinition = (strchr(expr, '=') != nullptr) || (strstr(expr, "->") != nullptr);
 
     bool shouldPrintResult = false;
     double result = 0.0;
 
-    if (isStatement && parse_statement(parseCtx))
+    if (isDefinition && parse_definition(parseCtx))
     {
         strcpy(resBuffer, "  ok.");
     }
@@ -229,7 +224,11 @@ bool calc_eval(const char* expr, char* resBuffer, int resBufferLen)
         on_parse_error(parseCtx, "trailing nonsense");
     
     if (shouldPrintResult)
-        dtostr_human(result, resBuffer, resBufferLen);
+    {
+        strcpy(resBuffer, "  = ");
+        const int introLen = strlen(resBuffer);
+        dtostr_human(result, resBuffer + introLen, resBufferLen - introLen);
+    }
 
     return !parseCtx.Error;
 }

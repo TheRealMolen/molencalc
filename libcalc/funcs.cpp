@@ -176,3 +176,69 @@ const UserFunction* lookup_user_func(const char* name)
 
 //-----------------------------------------------------------------------------------------------
 
+BuiltinFunctionIt function_builtin_begin()
+{
+    return gFunctions;
+}
+
+BuiltinFunctionIt function_next(BuiltinFunctionIt it)
+{
+    if (!it)
+        return nullptr;
+
+    ++it;
+    if (it >= (gFunctions + kNumFunctions))
+        return nullptr;
+
+    return it;
+}
+
+const char* function_name(BuiltinFunctionIt it)
+{
+    if (!it)
+        return "<null>";
+    return it->Name;
+}
+
+UserFunctionIt function_user_begin()
+{
+    UserFunctionIt it = gUserFuncs;
+    if (!it->IsUsed)
+        it = function_next(it);
+
+    return it;
+}
+
+UserFunctionIt function_next(UserFunctionIt it)
+{
+    if (!it)
+        return nullptr;
+
+    for (++it; it <= gUserFuncs + kMaxUserFuncs; ++it)
+    {
+        if (it->IsUsed)
+            return it;
+    }
+
+    return nullptr;
+}
+
+const char* function_name(UserFunctionIt it)
+{
+    if (!it || !it->IsUsed)
+        return "<undefined>";
+
+    return it->Name;
+}
+
+const char* function_def(UserFunctionIt it)
+{
+    if (!it || !it->IsUsed)
+        return "<undefined>";
+
+    return it->Def;
+}
+
+
+//-----------------------------------------------------------------------------------------------
+

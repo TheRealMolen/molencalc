@@ -374,20 +374,6 @@ uint8_t lcd_putc(int x, int y, uint8_t c)
     return metric.Advance;
 }
 
-// Draw a string at the specified position
-// handles wrapping at edge of screen back to _column_
-void lcd_putstr(int x, int y, const char *str)
-{
-    if (x >= WIDTH)
-        return;
-
-    for (; *str; ++str)
-    {
-        const uint8_t advance = lcd_putc(x, y, *str);
-        lcd_inc_column(advance);
-    }
-}
-
 void lcd_inc_column(uint8_t advance)
 {
     gCursorX += advance;
@@ -433,6 +419,23 @@ static void lcd_next_line()
         lcd_scroll_up(glyph_height);
 }
 
+static void lcd_next_tab()
+{
+    const int tabwidth = 6 * font->Width;
+    gCursorX += tabwidth + font->Width - 1;
+    if (gCursorX >= (WIDTH - tabwidth))
+    {
+        gCursorX = 0;
+        gCurrColIx = 0;
+        lcd_next_line();
+    }
+    else
+    {
+        gCursorX -= (gCursorX % tabwidth);
+    }
+}
+
+
 
 void lcd_emit(char c)
 {
@@ -442,6 +445,10 @@ void lcd_emit(char c)
     {
     case CHR_BS:
         lcd_backspace();
+        break;
+
+    case '\t':
+        lcd_next_tab();
         break;
 
     case '\n':

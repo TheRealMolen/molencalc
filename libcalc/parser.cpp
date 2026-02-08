@@ -20,7 +20,7 @@ const char* kTokenNames[] =
     "!",
     "<",">",
     "=",
-    ":", "->",
+    "->",
     ",",
 };
 static_assert((sizeof(kTokenNames) / sizeof(kTokenNames[0])) == size_t(Token::COUNT));
@@ -212,13 +212,23 @@ void advance_token(ParseCtx& ctx)
     case '*': ctx.NextToken = Token::Times;     break;
     case '^': ctx.NextToken = Token::Exponent;  break;
     case '/': ctx.NextToken = Token::Divide;    break;
-    case '(': ctx.NextToken = Token::LParen;    break;
-    case ')': ctx.NextToken = Token::RParen;    break;
+
+    case '(':
+    case '{':
+    case '[':
+        ctx.NextToken = Token::LParen;
+        break;
+
+    case ')':
+    case '}':
+    case ']':
+        ctx.NextToken = Token::RParen;
+        break;
+
     case '<': ctx.NextToken = Token::LessThan;  break;
     case '>': ctx.NextToken = Token::GreaterThan;  break;
 
     case '!': ctx.NextToken = Token::Factorial; break;
-    case ':': ctx.NextToken = Token::Assign;    break;
     case '=': ctx.NextToken = Token::Equals;    break;
     case ',': ctx.NextToken = Token::Comma;     break;
 

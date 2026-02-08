@@ -1,6 +1,9 @@
 #include "cmd.h"
 
+#include "format.h"
+#include "funcs.h"
 #include "parser.h"
+#include "symbols.h"
 
 #include <cstring>
 
@@ -31,9 +34,11 @@ bool cmd_help(ParseCtx& ctx)
     }
 
     calc_puts("Type expression, press Enter\n\n");
-    calc_puts("Define function with\n");
-    calc_puts(" <name>: <var> -> <expr in var>\n");
-    calc_puts("eg.  f: x -> sin(x^2)\n\n");
+    calc_puts("Define var / function with\n");
+    calc_puts(" <name>[<var>] = <expr in var>\n");
+    calc_puts("eg.  f[x] = sin(x^2)\n");
+    calc_puts("eg.  theta = 2pi/3\n");
+    calc_puts("\n([{ and }]) are interchangeable\n\n");
 
     const CommandDef* cmd = gCommands;
     for (int i=0; i<gRegisteredCommands; ++i, ++cmd)
@@ -49,11 +54,71 @@ bool cmd_help(ParseCtx& ctx)
 
 //-------------------------------------------------------------------------------------------------
 
+bool cmd_list(const char*)
+{
+    calc_puts("== builtin functions ==\n");
+
+    for (BuiltinFunctionIt it = function_builtin_begin();
+        it;
+        it = function_next(it))
+    {
+        calc_puts(function_name(it));
+        calc_puts("\t");
+    }
+
+    calc_puts("\n\n== builtin constants ==\n");
+    for (BuiltinSymbolIt it = symbol_builtin_begin();
+        it;
+        it = symbol_next(it))
+    {
+        calc_puts(symbol_name(it));
+        calc_puts("\t");
+    }
+    calc_puts("\n");
+
+    if (UserFunctionIt it = function_user_begin())
+    {
+        calc_puts("\n== user-defined functions ==\n");
+
+        for (; it; it = function_next(it))
+        {
+            calc_puts("  ");
+            calc_puts(function_name(it));
+            calc_puts("(...) = ");
+            calc_puts(function_def(it));
+            calc_puts("\n");
+        }
+    }
+
+    if (UserSymbolIt it = symbol_user_begin())
+    {
+        calc_puts("\n== user-defined symbols ==\n");
+
+        for (; it; it = symbol_next(it))
+        {
+            char val_str[32];
+            dtostr_human(symbol_val(it), val_str, sizeof(val_str));
+            val_str[sizeof(val_str)-1] = 0;
+
+            calc_puts("  ");
+            calc_puts(symbol_name(it));
+            calc_puts(" = ");
+            calc_puts(val_str);
+            calc_puts("\n");
+        }
+    }
+
+    return true;
+}
+
+//-------------------------------------------------------------------------------------------------
+
 void init_commands()
 {
     gRegisteredCommands = 0;
 
     register_calc_cmd(cmd_help, "help", "help [command]", "shows help");
+    register_calc_cmd(cmd_list, "list", "list", "lists definitions");
 }
 
 //-------------------------------------------------------------------------------------------------

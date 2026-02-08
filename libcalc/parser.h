@@ -23,7 +23,7 @@ enum class Token
     LessThan, GreaterThan,
     Equals,
 
-    Assign, Map,
+    Map,
     Comma,
 
     COUNT,

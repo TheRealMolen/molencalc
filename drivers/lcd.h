@@ -117,7 +117,6 @@ void lcd_scroll_down(void);
 // Draw a character at the specified position
 // returns the width of the drawn character
 uint8_t lcd_putc(int x, int y, uint8_t c);
-void lcd_putstr(int x, int y, const char *str);
 
 void lcd_inc_column(uint8_t advance);
 void lcd_backspace();
