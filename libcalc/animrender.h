@@ -103,7 +103,6 @@ private:
 
     const PlotAxis mAxisX, mAxisY;
     const FastAxis mX, mY;
-    uint16_t* mPix = nullptr;
 };
 
 //-------------------------------------------------------------------------------------------------
