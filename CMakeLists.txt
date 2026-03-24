@@ -46,6 +46,8 @@ add_executable(molencalc
         drivers/southbridge.c
         drivers/southbridge.h
 
+        libcalc/animrender.cpp
+        libcalc/chaos.cpp
         libcalc/cmd.cpp
         libcalc/expr.cpp
         libcalc/font.cpp
@@ -74,6 +76,7 @@ pico_enable_stdio_usb(molencalc 0)
 # Turn on all warnings
 target_compile_options(molencalc PRIVATE -Wall -Werror)
 target_compile_options(molencalc PRIVATE -DD_PLATFORM_PICO)
+target_compile_options(molencalc PRIVATE -save-temps=obj -fverbose-asm)
 
 # Add the standard library to the build
 target_link_libraries(molencalc

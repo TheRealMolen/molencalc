@@ -3,6 +3,10 @@
 #include "pico/stdlib.h"
 #include "font.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define LCD_SPI         (spi1)          // SPI interface for the LCD display
 
 // Raspberry Pi Pico board GPIO pins
@@ -134,3 +138,8 @@ bool lcd_cursor_enabled(void);
 // Initialization
 void lcd_clear_screen(void);
 void lcd_init(void);
+
+
+#ifdef __cplusplus
+};
+#endif

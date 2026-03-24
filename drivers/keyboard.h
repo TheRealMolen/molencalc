@@ -2,6 +2,11 @@
 
 #include "pico/stdlib.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 // Keyboard key definitions
 #define KEY_MOD_ALT         (0xA1)
 #define KEY_MOD_SHL         (0xA2)
@@ -64,3 +69,7 @@ void keyboard_set_background_poll(bool enable);
 void keyboard_poll(void);
 bool keyboard_key_available(void);
 char keyboard_get_key(void);
+
+#ifdef __cplusplus
+};
+#endif

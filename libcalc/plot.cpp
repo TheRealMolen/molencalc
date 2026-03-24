@@ -27,7 +27,7 @@ static inline void safePlot(int x, int y, uint16_t col)
     {
         gPlot.Pixels[y * MC_PLOT_WIDTH + x] = col;
     }
-};
+}
 
 static void interpolateY(int startXi, int startYi, int endYi, uint16_t col)
 {
@@ -69,63 +69,6 @@ static void interpolateY(int startXi, int startYi, int endYi, uint16_t col)
         for (int yi = midYi; yi < endYi; ++yi)
             safePlot(startXi+1, yi, col);
     }
-};
-
-
-struct FastAxis
-{
-    const PlotAxis& Axis;
-    int StartI, EndI;
-    int LoI, HiI;
-    float Range;
-    double IRange;
-    float RangeRecip;
-    float UnitsPerPix;
-
-    FastAxis(const PlotAxis& axis, int startI, int endI)
-        : Axis(axis)
-        , StartI(startI)
-        , EndI(endI)
-        , LoI(startI < endI ? startI : endI)
-        , HiI(endI > startI ? endI : startI)
-        , Range(axis.Hi - axis.Lo)
-        , IRange(endI - startI)
-        , RangeRecip(1.0 / Range)
-        , UnitsPerPix(Range / IRange)
-    { /**/ }
-
-    // chart coords are ints from 0 at left of axis to (HiI-1) at the right
-    // screen coords are ints from 0 to screen buf size (MC_PLOT_*)
-
-    double FromChart(int vi) const
-    {
-        return Axis.Lo + (vi * UnitsPerPix);
-    }
-    double FromScreen(int vi) const
-    {
-        return Axis.Lo + ((vi - LoI) * UnitsPerPix);
-    }
-
-    double ToScreen(double v) const
-    {
-        return (StartI + IRange * ((v - Axis.Lo) * RangeRecip));
-    }
-    double ToScreenClamped(double v) const
-    {
-        const double scr = ToScreen(v);
-        if (scr < LoI)
-            return LoI;
-        if (scr > HiI)
-            return HiI;
-        return scr;
-    }
-
-    bool IsScreenValInArea(double scr) const
-    {
-        const int si = int(scr);
-        return ((si >= LoI) && (si <= HiI));
-    }
-
 };
 
 static void plot_hline_fast(int x0, int y, int x1, uint16_t col)
@@ -175,7 +118,7 @@ bool draw_plot(const char* func_name, const PlotAxis* xAxis, const PlotAxis* yAx
     const int yZeroScr = int(xAx.ToScreenClamped(0));
     plot_vline_fast(yZeroScr, yAx.LoI, yAx.HiI, axisCol);
     
-    double lastY;
+    double lastY = eval_user_func(func, xAx.LoI, ctx);
     int lastYi = -1;
 
     for (int xi=xAx.LoI; xi<=xAx.HiI; ++xi)

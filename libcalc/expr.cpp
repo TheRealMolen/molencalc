@@ -34,6 +34,7 @@ double parse_postfix(ParseCtx& ctx)
 {
     char errBuf[20+kMaxSymbolLength+1];
 
+    double val = 1.0 / 0.0;
     if (peek(ctx, Token::Symbol))
     {
         const int sym_name_pos = ctx.CurrIx;
@@ -49,32 +50,32 @@ double parse_postfix(ParseCtx& ctx)
             if (!expect(ctx, Token::RParen))
                 return 0.0;
 
-            double val;
-            if (eval_function(symbol, arg1, val, ctx))
-                return val;
+            if (!eval_function(symbol, arg1, val, ctx))
+            {
+                if (ctx.Error)
+                    return 0.0;
 
-            if (ctx.Error)
+                ctx.CurrIx = sym_name_pos;
+                sprintf(errBuf, "unknown func: %s", symbol);
+                on_parse_error(ctx, errBuf);
                 return 0.0;
-
-            ctx.CurrIx = sym_name_pos;
-            sprintf(errBuf, "unknown func: %s", symbol);
-            on_parse_error(ctx, errBuf);
-            return 0.0;
+            }
         }
         else
         {
-            double val;
-            if (eval_named_value(symbol, val))
-                return val;
-
-            ctx.CurrIx = sym_name_pos;
-            sprintf(errBuf, "unknown named val: %s", symbol);
-            on_parse_error(ctx, errBuf);
-            return 0.0;
+            if (!eval_named_value(symbol, val))
+            {
+                ctx.CurrIx = sym_name_pos;
+                sprintf(errBuf, "unknown named val: %s", symbol);
+                on_parse_error(ctx, errBuf);
+                return 0.0;
+            }
         }
     }
-
-    double val = parse_primary(ctx);
+    else
+    {
+        val = parse_primary(ctx);
+    }
 
     if (accept(ctx, Token::Factorial))
     {

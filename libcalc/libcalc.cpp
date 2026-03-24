@@ -1,5 +1,6 @@
 #include "libcalc.h"
 
+#include "chaos.h"
 #include "cmd.h"
 #include "expr.h"
 #include "format.h"
@@ -8,7 +9,9 @@
 #include "plot.h"
 #include "symbols.h"
 
+#include <cmath>
 #include <cstring>
+#include <iostream>
 
 //-------------------------------------------------------------------------------------------------
 
@@ -187,6 +190,8 @@ void calc_init(calc_puts_func puts_func)
     init_commands();
 
     register_calc_cmd(cmd_graph_y, "g", "g fn [lo<x<hi] [, lo<y<hi]", "graph of y=fn(x)");
+
+    register_chaos_commands();
 }
 
 //-------------------------------------------------------------------------------------------------
