@@ -13,6 +13,7 @@ extern void render();
 
 #include "drivers/keyboard.h"
 #include "drivers/lcd.h"
+#include "drivers/text.h"
 
 #endif
 
@@ -138,7 +139,7 @@ AnimRenderer::AnimRenderer(float minX, float maxX, float minY, float maxY)
 #elif MLN_TARGET_PICO
 
     lcd_scroll_clear();
-    lcd_enable_cursor(false);
+    cursor_enable(false);
 
 #endif
 }
@@ -151,7 +152,7 @@ AnimRenderer::~AnimRenderer()
 
 #elif MLN_TARGET_PICO
 
-    lcd_enable_cursor(true);
+    cursor_enable(true);
 
 #endif
 }

@@ -20,6 +20,79 @@
 
 #include "lcd.h"
 
+
+#define LCD_SPI         (spi1)          // SPI interface for the LCD display
+
+// Raspberry Pi Pico board GPIO pins
+#define LCD_SCL         (10)            // serial clock (SCL)
+#define LCD_SDI         (11)            // serial data in (SDI)
+#define LCD_SDO         (12)            // serial data out (SDO)
+#define LCD_CSX         (13)            // chip select (CSX)
+#define LCD_DCX         (14)            // data/command (D/CX)
+#define LCD_RST         (15)            // reset (RESET)
+
+
+// LCD interface definitions
+// According to the ST7789P datasheet, the maximum SPI clock speed is 62.5 MHz.
+// However, the controller can handle 75 MHz in practice.
+#define LCD_BAUDRATE    (75000000)      // 75 MHz SPI clock speed
+#define LCD_I2C_TIMEOUT_US (1000)       // I2C timeout in microseconds
+
+// LCD command definitions
+#define LCD_CMD_NOP     (0x00)          // no operation
+#define LCD_CMD_SWRESET (0x01)          // software reset
+#define LCD_CMD_SLPIN   (0x10)          // sleep in
+#define LCD_CMD_SLPOUT  (0x11)          // sleep out
+#define LCD_CMD_INVOFF  (0x20)          // display inversion off
+#define LCD_CMD_INVON   (0x21)          // display inversion on
+#define LCD_CMD_DISPOFF (0x28)          // display off
+#define LCD_CMD_DISPON  (0x29)          // display on
+#define LCD_CMD_CASET   (0x2A)          // column address set
+#define LCD_CMD_RASET   (0x2B)          // row address set
+#define LCD_CMD_RAMWR   (0x2C)          // memory write
+#define LCD_CMD_RAMRD   (0x2E)          // memory read
+#define LCD_CMD_VSCRDEF (0x33)          // vertical scroll definition
+#define LCD_CMD_MADCTL  (0x36)          // memory access control
+#define LCD_CMD_VSCSAD  (0x37)          // vertical scroll start address of RAM
+#define LCD_CMD_COLMOD  (0x3A)          // pixel format set
+#define LCD_CMD_IFMODE  (0xB0)          // interface mode control
+#define LCD_CMD_FRMCTR1 (0xB1)          // frame rate control (in normal mode)
+#define LCD_CMD_FRMCTR2 (0xB2)          // frame rate control (in idle mode)
+#define LCD_CMD_FRMCTR3 (0xB3)          // frame rate control (in partial mode)
+#define LCD_CMD_DIC     (0xB4)          // display inversion control
+#define LCD_CMD_DFC     (0xB6)          // display function control
+#define LCD_CMD_EMS     (0xB7)          // entry mode set
+#define LCD_CMD_MODESEL (0xB9)          // mode set
+#define LCD_CMD_PWR1    (0xC0)          // power control 1
+#define LCD_CMD_PWR2    (0xC1)          // power control 2
+#define LCD_CMD_PWR3    (0xC2)          // power control 3
+#define LCD_CMD_VCMPCTL (0xC5)          // VCOM control
+#define LCD_CMD_PGC     (0xE0)          // positive gamma control
+#define LCD_CMD_NGC     (0xE1)          // negative gamma control
+#define LCD_CMD_DGC1    (0xE2)          // driver gamma control 1
+#define LCD_CMD_DGC2    (0xE3)          // driver gamma control
+#define LCD_CMD_DOCA    (0xE8)          // driver output control
+#define LCD_CMD_E9      (0xE9)          // Manufacturer command
+#define LCD_CMD_F0      (0xF0)          // Manufacturer command
+#define LCD_CMD_F7      (0xF7)          // Manufacturer command
+
+#define FRAME_HEIGHT    (480)           // frame memory height in pixels
+
+
+
+// Display control functions
+void lcd_reset(void);
+void lcd_display_on(void);
+void lcd_display_off(void);
+
+// Low-level SPI functions
+void lcd_write_cmd(uint8_t cmd);
+void lcd_write_data(uint8_t len, ...);
+void lcd_write16_data(uint8_t len, ...);
+void lcd_write16_buf(const uint16_t *buffer, size_t len);
+
+
+
 static bool lcd_initialised = false; // flag to indicate if the LCD is initialised
 
 static uint16_t lcd_scroll_top = 0;                      // top fixed area for vertical scrolling
@@ -27,25 +100,8 @@ static uint16_t lcd_memory_scroll_height = FRAME_HEIGHT; // scroll area height
 static uint16_t lcd_scroll_bottom = 0;                   // bottom fixed area for vertical scrolling
 static uint16_t lcd_y_offset = 0;                        // offset for vertical scrolling
 
-static bool gMonospace = false;
-
-static int gCursorX = 0;
-static int gCursorY = 0;
-
-#define MAX_COLS ((WIDTH)/2)
-static int gCurrColIx = 0;
-static uint8_t gColWidths[MAX_COLS];
-
-static uint16_t gFgCol = 0xFF07;
-static uint16_t gBgCol = 0x0000;
-
-// Text drawing
-const Font *font = &font_10x16;
-static uint16_t char_buffer[16 * FONT_MAX_HEIGHT] __attribute__((aligned(4)));
-
 // Background processing
 static uint32_t irq_state;
-static repeating_timer_t cursor_timer;
 
 static void lcd_disable_interrupts()
 {
@@ -57,30 +113,6 @@ static void lcd_enable_interrupts()
 {
     //gpio_put(3, false);
     restore_interrupts(irq_state);
-}
-
-
-void lcd_set_font(const Font *new_font)
-{
-    // Set the new font
-    font = new_font;
-}
-
-// Set foreground colour
-void lcd_set_foreground(uint16_t colour)
-{
-    gFgCol = colour;
-}
-
-// Set background colour
-void lcd_set_background(uint16_t colour)
-{
-    gBgCol = colour;
-}
-
-void lcd_set_monospace(bool mono)
-{
-    gMonospace = mono;
 }
 
 //
@@ -120,7 +152,7 @@ void lcd_write16_data(uint8_t len, ...)
     // DO NOT MOVE THE spi_set_format() OR THE gpio_put(LCD_DCX) CALLS!
     // They are placed before the gpio_put(LCD_CSX) to ensure that a minimum
     // chip select high pulse width is achieved (at least 40ns)
-    spi_set_format(LCD_SPI, 16, 0, 0, SPI_MSB_FIRST);
+    spi_set_format(LCD_SPI, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
     va_start(args, len);
     gpio_put(LCD_DCX, 1); // Data
@@ -133,7 +165,7 @@ void lcd_write16_data(uint8_t len, ...)
     gpio_put(LCD_CSX, 1);
     va_end(args);
 
-    spi_set_format(LCD_SPI, 8, 0, 0, SPI_MSB_FIRST);
+    spi_set_format(LCD_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 }
 
 void lcd_write16_buf(const uint16_t *buffer, size_t len)
@@ -141,14 +173,14 @@ void lcd_write16_buf(const uint16_t *buffer, size_t len)
     // DO NOT MOVE THE spi_set_format() OR THE gpio_put(LCD_DCX) CALLS!
     // They are placed before the gpio_put(LCD_CSX) to ensure that a minimum
     // chip select high pulse width is achieved (at least 40ns)
-    spi_set_format(LCD_SPI, 16, 0, 0, SPI_MSB_FIRST);
+    spi_set_format(LCD_SPI, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
     gpio_put(LCD_DCX, 1); // Data
     gpio_put(LCD_CSX, 0);
     spi_write16_blocking(LCD_SPI, buffer, len);
     gpio_put(LCD_CSX, 1);
 
-    spi_set_format(LCD_SPI, 8, 0, 0, SPI_MSB_FIRST);
+    spi_set_format(LCD_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 }
 
 //
@@ -277,15 +309,15 @@ void lcd_scroll_reset()
     lcd_enable_interrupts();
 }
 
-void lcd_scroll_clear()
+void lcd_scroll_clear(uint16_t col)
 {
     lcd_scroll_reset(); // Reset the scroll area to the top
 
     // Clear the scrolling area
-    lcd_solid_rectangle(gBgCol, 0, lcd_scroll_top, WIDTH, lcd_memory_scroll_height);
+    lcd_solid_rectangle(col, 0, lcd_scroll_top, WIDTH, lcd_memory_scroll_height);
 }
 
-// Scroll the screen up one line (make space at the bottom)
+// Scroll the screen up (make space at the bottom)
 void lcd_scroll_up(uint32_t distance)
 {
     // Ensure the scroll height is non-zero to avoid division by zero
@@ -302,25 +334,18 @@ void lcd_scroll_up(uint32_t distance)
     lcd_enable_interrupts();
 
     // Clear the new line at the bottom
-    lcd_solid_rectangle(gBgCol, 0, HEIGHT - distance, WIDTH, distance);
-
-    if (gCursorY > distance)
-        gCursorY -= distance;
-    else
-        gCursorY = 0;
+    lcd_solid_rectangle(0, 0, HEIGHT - distance, WIDTH, distance);
 }
 
 // Scroll the screen down one line (making space at the top)
-void lcd_scroll_down()
+void lcd_scroll_down(uint32_t distance)
 {
-    const uint8_t glyph_height = font->Height;
-
     // Ensure lcd_memory_scroll_height is non-zero to avoid division by zero
     if (lcd_memory_scroll_height == 0) {
-        return; // Safely exit if the scroll height is zero
+        return;
     }
     // This will rotate the content in the scroll area down by one line
-    lcd_y_offset = (lcd_y_offset - glyph_height + lcd_memory_scroll_height) % lcd_memory_scroll_height;
+    lcd_y_offset = (lcd_y_offset - distance + lcd_memory_scroll_height) % lcd_memory_scroll_height;
     uint16_t scroll_area_start = lcd_scroll_top + lcd_y_offset;
 
     lcd_disable_interrupts();
@@ -329,7 +354,7 @@ void lcd_scroll_down()
     lcd_enable_interrupts();
 
     // Clear the new line at the top
-    lcd_solid_rectangle(gBgCol, 0, lcd_scroll_top, WIDTH, glyph_height);
+    lcd_solid_rectangle(0, 0, lcd_scroll_top, WIDTH, distance);
 }
 
 //
@@ -340,233 +365,9 @@ void lcd_scroll_down()
 void lcd_clear_screen()
 {
     lcd_scroll_reset(); // Reset the scrolling area to the top
-    lcd_solid_rectangle(gBgCol, 0, 0, WIDTH, FRAME_HEIGHT);
+    lcd_solid_rectangle(0, 0, 0, WIDTH, FRAME_HEIGHT);
 }
-
-
-// Draw a character at the specified position
-// returns the width of the drawn character
-uint8_t lcd_putc(int x, int y, uint8_t c)
-{
-    const int glyph_width = font->Width;
-    const int glyph_height = font->Height;
-    font_rasterise_char(font, c, gFgCol, gBgCol, char_buffer, glyph_width, glyph_height, 0, 0);
-
-    const GlyphMetric metric = font_get_glyph_metric(font, c, gMonospace);
-
-    // if we have any skipping/shrinking to do, do that inplace
-    if (metric.Skip > 0 || metric.Advance < glyph_width)
-    {
-        uint16_t* dest = char_buffer;
-        const uint16_t* src = char_buffer + metric.Skip;
-        for (int row = 0; row < glyph_height; ++row)
-        {
-            memmove(dest, src, metric.Advance * sizeof(*src));
-            dest += metric.Advance;
-            src += glyph_width;
-        }
-    }
-
-    // the buf width is the smaller of the glyph_width and Advance
-    const int bufw = (glyph_width < metric.Advance) ? glyph_width : metric.Advance;
-    lcd_blit(char_buffer, x, y, bufw, glyph_height);
-
-    return metric.Advance;
-}
-
-void lcd_inc_column(uint8_t advance)
-{
-    gCursorX += advance;
-
-    gColWidths[gCurrColIx] = advance;
-    ++gCurrColIx;
-
-    if (gCursorX >= WIDTH || gCurrColIx >= MAX_COLS)
-    {
-        gCursorX = 0;
-        gCursorY += font->Height;
-
-        // TODO: this breaks backspace from one line to the previous
-        // ideally we'd remember the start ix of each line and only reset when flushing
-        gCurrColIx = 0;
-    }
-}
-
-void lcd_backspace()
-{
-    if (gCurrColIx <= 0)
-        return;
-
-    lcd_erase_cursor();
-
-    --gCurrColIx;
-
-    const int glyphWidth = gColWidths[gCurrColIx];
-    gCursorX -= glyphWidth;
-
-    lcd_solid_rectangle(gBgCol, gCursorX, gCursorY, glyphWidth, font->Height);
-
-    lcd_draw_cursor();
-}
-
-
-static void lcd_next_line()
-{
-    const int glyph_height = font->Height;
-    gCursorY += glyph_height;
-
-    while (gCursorY >= (HEIGHT - glyph_height))
-        lcd_scroll_up(glyph_height);
-}
-
-static void lcd_next_tab()
-{
-    const int tabwidth = 6 * font->Width;
-    gCursorX += tabwidth + font->Width - 1;
-    if (gCursorX >= (WIDTH - tabwidth))
-    {
-        gCursorX = 0;
-        gCurrColIx = 0;
-        lcd_next_line();
-    }
-    else
-    {
-        gCursorX -= (gCursorX % tabwidth);
-    }
-}
-
-
-
-void lcd_emit(char c)
-{
-    lcd_erase_cursor(); // erase the cursor before processing the character
-
-    switch (c)
-    {
-    case CHR_BS:
-        lcd_backspace();
-        break;
-
-    case '\t':
-        lcd_next_tab();
-        break;
-
-    case '\n':
-        gCurrColIx = 0;
-        gCursorX = 0;
-        lcd_next_line();
-
-    default:
-        if (c >= 0x20 && c < 0x7F) // printable characters
-        {
-            const uint8_t advance = lcd_putc(gCursorX, gCursorY, c);
-            lcd_inc_column(advance);
-        }
-        break;
-    }
-
-    lcd_draw_cursor();
-}
-
-void lcd_emit_str(const char* s)
-{
-    if (!s)
-        return;
-    
-    for (; *s; ++s)
-        lcd_emit(*s);
-}
-
-
-void lcd_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh) 
-{
-    lcd_erase_cursor();
-
-    // we draw the image line-by-line
-    // partly because it makes it animate nice, and partly because 
-    // figuring out the appropriate logic to wrap the image around the frame
-    // is more effort than i'm interested in :)
-    uint32_t height_remaining = imgh;
-
-    const uint16_t* next_pixels = pixels;
-    while (height_remaining > 0)
-    {
-        uint32_t line_height = 1;
-
-        // scroll up enough so there's at least imgh pixels free to draw on 
-        // nb. we're over-clearing the back buf at this point as we're about to blat over a chunk with the img 
-        int line_btm = gCursorY; 
-        int img_top = HEIGHT - line_height; 
-        if (line_btm > img_top) 
-        { 
-            lcd_scroll_up(line_btm - img_top); 
-            line_btm = gCursorY; 
-        }
-        if (img_top > line_btm)
-            img_top = line_btm;
-
-        const int img_left = (int)(WIDTH - imgw - 1);
-
-        lcd_blit(next_pixels, img_left, img_top, imgw, line_height);
-    
-        gCursorY += line_height;
-        height_remaining -= line_height;
-        next_pixels += imgw * line_height;
-    }
-
-    // note: leave the cursor undrawn here as it can interfere with the next line of text
-    //lcd_draw_cursor();
-} 
  
-
-
-//
-// The cursor
-//
-// A performance cheat: The cursor is drawn as a solid line at the bottom of the
-// character cell. The cursor is positioned here since the printable glyphs
-// do not extend to that row (on purpose). Drawing and erasing the cursor does
-// not corrupt the glyphs.
-//
-// Except for the box drawing glyphs who do extend into that row. Disable the
-// cursor when printing these if you want to see the box drawing glyphs
-// uncorrupted.
-
-static bool cursor_enabled = true; // cursor visibility state
-
-// Enable or disable the cursor
-void lcd_enable_cursor(bool cursor_on)
-{
-    // Cursor visibility is not implemented, but we can toggle the state
-    cursor_enabled = cursor_on;
-}
-
-// Check if the cursor is enabled
-bool lcd_cursor_enabled()
-{
-    // Return the current cursor visibility state
-    return cursor_enabled;
-}
-
-static void blit_cursor(uint16_t col)
-{
-    if (!cursor_enabled)
-        return;
-
-    lcd_solid_rectangle(col, gCursorX, gCursorY + font->Height - 1, font->Width, 1);
-}
-
-// Draw the cursor at the current position
-void lcd_draw_cursor()
-{
-    blit_cursor(gFgCol);
-}
-
-// Erase the cursor at the current position
-void lcd_erase_cursor()
-{
-    blit_cursor(gBgCol);
-}
 
 //
 //  Display control functions
@@ -599,34 +400,6 @@ void lcd_display_off()
     lcd_enable_interrupts();
 }
 
-//
-//  Background processing
-//
-//  Handle background tasks such as blinking the cursor
-//
-
-// Blink the cursor at regular intervals
-bool on_cursor_timer(repeating_timer_t *rt)
-{
-    static bool cursor_visible = false;
-
-    if (!lcd_cursor_enabled())
-    {
-        return true; // if the SPI bus is not available or cursor is disabled, do not toggle cursor
-    }
-
-    if (cursor_visible)
-    {
-        lcd_erase_cursor();
-    }
-    else
-    {
-        lcd_draw_cursor();
-    }
-
-    cursor_visible = !cursor_visible; // Toggle cursor visibility
-    return true;                      // Keep the timer running
-}
 
 // Initialize the LCD display
 void lcd_init()
@@ -696,9 +469,6 @@ void lcd_init()
     // Now that the display is initialized, display RAM garbage is cleared,
     // turn on the display
     lcd_display_on();
-
-    // Blink the cursor every second (500 ms on, 500 ms off)
-    add_repeating_timer_ms(-500, on_cursor_timer, NULL, &cursor_timer);
 
     lcd_initialised = true; // Set the initialised flag
 }

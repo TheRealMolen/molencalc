@@ -6,6 +6,7 @@
 #include "keyboard.h"
 #include "southbridge.h"
 #include "serial.h"
+#include "text.h"
 
 // Callback for when characters become available
 static void (*chars_available_callback)(void *) = NULL;
@@ -15,7 +16,7 @@ static void picocalc_out_chars(const char *buf, int length)
 {
     for (int i = 0; i < length; ++i)
     {
-        lcd_emit(buf[i]);
+        text_emit(buf[i]);
     }
 }
 

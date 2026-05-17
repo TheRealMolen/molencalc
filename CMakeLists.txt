@@ -35,16 +35,18 @@ pico_sdk_init()
 
 
 add_executable(molencalc
-        main.c
+        main.cpp
 
-        drivers/keyboard.c
+        drivers/keyboard.cpp
         drivers/keyboard.h
-        drivers/lcd.c
+        drivers/lcd.cpp
         drivers/lcd.h
-        drivers/picocalc.c
+        drivers/picocalc.cpp
         drivers/picocalc.h
         drivers/southbridge.c
         drivers/southbridge.h
+        drivers/text.cpp
+        drivers/text.h
 
         libcalc/animrender.cpp
         libcalc/chaos.cpp

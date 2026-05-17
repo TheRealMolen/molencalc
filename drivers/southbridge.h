@@ -2,6 +2,11 @@
 
 #include "pico/stdlib.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 #define SB_I2C              (i2c1)      // I2C interface for the south bridge
 
 // Raspberry Pi Pico board GPIO pins
@@ -40,3 +45,9 @@ uint8_t sb_write_keyboard_backlight(uint8_t brightness);
 bool sb_is_power_off_supported(void);
 bool sb_write_power_off_delay(uint8_t delay_seconds);
 bool sb_reset(uint8_t delay_seconds);
+
+
+#ifdef __cplusplus
+};
+#endif
+

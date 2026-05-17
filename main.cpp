@@ -13,6 +13,7 @@
 #include "drivers/picocalc.h"
 #include "drivers/lcd.h"
 #include "drivers/keyboard.h"
+#include "drivers/text.h"
 
 #include "libcalc/libcalc.h"
 
@@ -80,13 +81,13 @@ static bool cmd_bye(const char*)
 
 static bool cmd_big(const char*)
 {
-    lcd_set_font(&font_10x16);
+    text_set_font(&font_10x16);
     return true;
 }
 
 static bool cmd_small(const char*)
 {
-    lcd_set_font(&font_5x10);
+    text_set_font(&font_5x10);
     return true;
 }
 
@@ -100,7 +101,7 @@ int main()
 
     init_platform();
 
-    calc_init(lcd_emit_str);
+    calc_init(text_emit_str);
     register_calc_cmd(cmd_big, "big", "", "switches to big text");
     register_calc_cmd(cmd_small, "small", "", "switches to small text");
     register_calc_cmd(cmd_bye, "bye", "", "resets to BOOTSEL");
@@ -117,7 +118,7 @@ int main()
 
         reset_plot();
 
-        lcd_erase_cursor();
+        cursor_erase();
         
         calc_eval(inputBuf, outputBuf, sizeof(outputBuf));
         puts(outputBuf);
@@ -125,7 +126,8 @@ int main()
         const Plot* plot = get_plot();
         if (plot)
         {
-            lcd_put_image(plot->Pixels, MC_PLOT_WIDTH, MC_PLOT_HEIGHT);
+            cursor_erase();
+            text_put_image(plot->Pixels, MC_PLOT_WIDTH, MC_PLOT_HEIGHT);
         }
     }
 }
