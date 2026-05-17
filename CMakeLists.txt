@@ -48,11 +48,14 @@ add_executable(molencalc
         drivers/text.cpp
         drivers/text.h
 
+        drivers/font.cpp
+        drivers/fonts/font-5x10.c
+        drivers/fonts/font-10x16.c
+
         libcalc/animrender.cpp
         libcalc/chaos.cpp
         libcalc/cmd.cpp
         libcalc/expr.cpp
-        libcalc/font.cpp
         libcalc/format.cpp
         libcalc/funcs.cpp
         libcalc/libcalc.cpp
@@ -60,9 +63,6 @@ add_executable(molencalc
         libcalc/parser.cpp
         libcalc/plot.cpp
         libcalc/symbols.cpp
-
-        libcalc/fonts/font-5x10.c
-        libcalc/fonts/font-10x16.c
         )
 
 pico_set_program_name(molencalc "molencalc")

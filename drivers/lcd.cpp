@@ -243,13 +243,13 @@ void lcd_blit(const uint16_t *pixels, int x, int y, int width, int height)
 }
 
 // Draw a solid rectangle on the display
-void lcd_solid_rectangle(uint16_t colour, uint16_t x, uint16_t y, uint16_t width, uint16_t height)
+void lcd_rect(int x, int y, int width, int height, uint16_t col)
 {
     static uint16_t pixels[WIDTH];
 
     for (uint16_t i = 0; i < width; i++)
     {
-        pixels[i] = colour;
+        pixels[i] = col;
     }
     for (uint16_t row = 0; row < height; row++)
     {
@@ -314,11 +314,11 @@ void lcd_scroll_clear(uint16_t col)
     lcd_scroll_reset(); // Reset the scroll area to the top
 
     // Clear the scrolling area
-    lcd_solid_rectangle(col, 0, lcd_scroll_top, WIDTH, lcd_memory_scroll_height);
+    lcd_rect(0, lcd_scroll_top, WIDTH, lcd_memory_scroll_height, col);
 }
 
 // Scroll the screen up (make space at the bottom)
-void lcd_scroll_up(uint32_t distance)
+void lcd_scroll_up(uint32_t distance, uint16_t clearCol)
 {
     // Ensure the scroll height is non-zero to avoid division by zero
     if (lcd_memory_scroll_height == 0) {
@@ -334,11 +334,11 @@ void lcd_scroll_up(uint32_t distance)
     lcd_enable_interrupts();
 
     // Clear the new line at the bottom
-    lcd_solid_rectangle(0, 0, HEIGHT - distance, WIDTH, distance);
+    lcd_rect(0, HEIGHT - distance, WIDTH, distance, clearCol);
 }
 
 // Scroll the screen down one line (making space at the top)
-void lcd_scroll_down(uint32_t distance)
+void lcd_scroll_down(uint32_t distance, uint16_t clearCol)
 {
     // Ensure lcd_memory_scroll_height is non-zero to avoid division by zero
     if (lcd_memory_scroll_height == 0) {
@@ -354,7 +354,7 @@ void lcd_scroll_down(uint32_t distance)
     lcd_enable_interrupts();
 
     // Clear the new line at the top
-    lcd_solid_rectangle(0, 0, lcd_scroll_top, WIDTH, distance);
+    lcd_rect(0, lcd_scroll_top, WIDTH, distance, clearCol);
 }
 
 //
@@ -362,10 +362,10 @@ void lcd_scroll_down(uint32_t distance)
 //
 
 // Clear the entire screen
-void lcd_clear_screen()
+void lcd_clear_screen(uint16_t col)
 {
     lcd_scroll_reset(); // Reset the scrolling area to the top
-    lcd_solid_rectangle(0, 0, 0, WIDTH, FRAME_HEIGHT);
+    lcd_rect(0, 0, WIDTH, FRAME_HEIGHT, col);
 }
  
 

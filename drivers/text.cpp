@@ -7,11 +7,9 @@
 
 #include <string.h>
 
-#include "pico/stdlib.h"
-#include "pico/multicore.h"
-#include "hardware/spi.h"
-
+#include "font.h"
 #include "lcd.h"
+#include "platform.h"
 
 
 static bool gMonospace = false;
@@ -157,7 +155,7 @@ void text_backspace()
     const int glyphWidth = gColWidths[gCurrColIx];
     gCursorX -= glyphWidth;
 
-    lcd_solid_rectangle(gBgCol, gCursorX, gCursorY, glyphWidth, gFont->Height);
+    lcd_rect(gCursorX, gCursorY, glyphWidth, gFont->Height, gBgCol);
 
     cursor_draw();
 }
@@ -253,7 +251,7 @@ static void blit_cursor(uint16_t col)
     if (!cursor_enabled)
         return;
 
-    lcd_solid_rectangle(col, gCursorX, gCursorY + gFont->Height - 1, gFont->Width, 1);
+    lcd_rect(gCursorX, gCursorY + gFont->Height - 1, gFont->Width, 1, col);
 }
 
 // Draw the cursor at the current position

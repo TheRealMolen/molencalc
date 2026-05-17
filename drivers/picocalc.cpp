@@ -65,6 +65,7 @@ void picocalc_init()
 {
     sb_init();
     lcd_init();
+    text_init();
     keyboard_init();
     keyboard_set_key_available_callback(picocalc_chars_available_notify);
     keyboard_set_background_poll(true);
