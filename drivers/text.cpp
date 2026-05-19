@@ -8,42 +8,84 @@
 #include <string.h>
 
 #include "font.h"
+#include "keyboard.h"
 #include "lcd.h"
 #include "platform.h"
 
+#if MLN_TARGET_PICO
+#include "pico/stdlib.h"
+#endif
 
-static bool gMonospace = false;
+//----------------------------------------------------------------------------------------
+// Text drawing
+const Font *gFont = &font_10x16;
 
-static int gCursorX = 0;
-static int gCursorY = 0;
-
-#define MAX_COLS ((WIDTH)/2)
-static int gCurrColIx = 0;
-static uint8_t gColWidths[MAX_COLS];
+static uint16_t char_buffer[16 * FONT_MAX_HEIGHT] __attribute__((aligned(4)));
 
 static uint16_t gFgCol = 0xFF07;
 static uint16_t gBgCol = 0x0000;
 
-// Text drawing
-const Font *gFont = &font_10x16;
-static uint16_t char_buffer[16 * FONT_MAX_HEIGHT] __attribute__((aligned(4)));
+static bool gMonospace = false;
 
+//----------------------------------------------------------------------------------------
+// Cursor
+static int gCursorX = 0;
+static int gCursorY = 0;
+static int8_t gCursorWidth = gFont->Width;
+
+#if MLN_TARGET_PICO
 static repeating_timer_t cursor_timer;
+#endif
 
+//----------------------------------------------------------------------------------------
+// Line editing
+constexpr int kMaxColIx = (WIDTH/2) - 1;
+constexpr int kMaxLinesInBuf = 16;
+int8_t gColWidths[kMaxColIx+1];
+uint16_t gLineEndX[kMaxLinesInBuf];
+int16_t gCurrColIx = 0;
+int16_t gCurrLineIx = 0;
+
+constexpr int kReadBufSize = 256;
+int16_t gReadBufIx = 0;     // the index of the cursor within the readbuf
+int16_t gReadBufEndIx = 0;  // the index of the final character in the readbuf
+bool gReadBufComplete = false;
+char gReadBuf[kReadBufSize] = {0};
+
+//----------------------------------------------------------------------------------------
+// Input history
+
+// the line history buffer is in two parts:
+//  1. a rolling buffer of chars excluding newlines and terminators; just a big block of chars
+//  2. ringbuffer of indices into the above + lengths
+constexpr int kHistoryBufSize = 2 * 1024;
+constexpr int kHistoryMaxLines = 32;
+
+struct HistoryLine
+{
+    uint16_t StartIx = 0;
+    uint16_t Length = 0;
+    bool     Valid = false;
+};
+
+char gHistoryBuf[kHistoryBufSize] = {0};
+int gNextHistoryWriteChar = 0;
+HistoryLine gHistoryLines[kHistoryMaxLines];
+int gCurrHistoryLine = 0;
+
+
+//----------------------------------------------------------------------------------------
 
 void text_set_font(const Font *new_font)
 {
-    // Set the new font
     gFont = new_font;
 }
 
-// Set foreground colour
 void text_set_foreground(uint16_t colour)
 {
     gFgCol = colour;
 }
 
-// Set background colour
 void text_set_background(uint16_t colour)
 {
     gBgCol = colour;
@@ -53,6 +95,38 @@ void text_set_monospace(bool mono)
 {
     gMonospace = mono;
 }
+
+//----------------------------------------------------------------------------------------
+
+void text_scroll_up()
+{
+    cursor_erase();
+
+    const int distance = gFont->Height;
+
+    lcd_scroll_up(distance);
+
+    if (gCursorY > distance)
+        gCursorY -= distance;
+    else
+        gCursorY = 0;
+}
+
+void text_scroll_down()
+{
+    cursor_erase();
+
+    const int distance = gFont->Height;
+
+    lcd_scroll_down(distance);
+
+    if (gCursorY + distance >= HEIGHT)
+        gCursorY = HEIGHT - distance;
+    else
+        gCursorY += distance;
+}
+
+//----------------------------------------------------------------------------------------
 
 // Draw a character at the specified position
 // returns the width of the drawn character
@@ -98,23 +172,16 @@ void text_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh)
     const uint16_t* next_pixels = pixels;
     while (height_remaining > 0)
     {
-        uint32_t line_height = 1;
-
-        // scroll up enough so there's at least imgh pixels free to draw on 
-        // nb. we're over-clearing the back buf at this point as we're about to blat over a chunk with the img 
-        int line_btm = gCursorY; 
-        int img_top = HEIGHT - line_height; 
-        if (line_btm > img_top) 
+        constexpr int line_height = 1;
+        if (gCursorY >= HEIGHT - line_height) 
         { 
-            lcd_scroll_up(line_btm - img_top); 
-            line_btm = gCursorY; 
+            lcd_scroll_up(1); 
+            gCursorY -= 1;
         }
-        if (img_top > line_btm)
-            img_top = line_btm;
 
         const int img_left = (int)(WIDTH - imgw - 1);
 
-        lcd_blit(next_pixels, img_left, img_top, imgw, line_height);
+        lcd_blit(next_pixels, img_left, gCursorY, imgw, line_height);
     
         gCursorY += line_height;
         height_remaining -= line_height;
@@ -132,7 +199,7 @@ void text_inc_column(uint8_t advance)
     gColWidths[gCurrColIx] = advance;
     ++gCurrColIx;
 
-    if (gCursorX >= WIDTH || gCurrColIx >= MAX_COLS)
+    if (gCursorX >= WIDTH || gCurrColIx >= kMaxColIx)
     {
         gCursorX = 0;
         gCursorY += gFont->Height;
@@ -168,6 +235,9 @@ static void text_next_line()
 
     while (gCursorY >= (HEIGHT - glyph_height))
         text_scroll_up();
+
+    gCurrColIx = 0;
+    gCursorX = 0;
 }
 
 static void text_next_tab()
@@ -203,13 +273,21 @@ void text_emit(char c)
         break;
 
     case '\n':
-        gCurrColIx = 0;
-        gCursorX = 0;
         text_next_line();
+        break;
 
     default:
         if (c >= 0x20 && c < 0x7F) // printable characters
         {
+            // TODO: refactor this; should all be in a single call!
+
+            // if this char would end off the screen, advance to the next line immediately
+            const GlyphMetric metric = font_get_glyph_metric(gFont, c, gMonospace);
+            if (gCursorX + metric.Advance >= WIDTH)
+            {
+                text_inc_column(metric.Advance);
+            }
+
             const uint8_t advance = text_putc(gCursorX, gCursorY, c);
             text_inc_column(advance);
         }
@@ -273,6 +351,8 @@ void cursor_erase()
 //  Handle background tasks such as blinking the cursor
 //
 
+#if MLN_TARGET_PICO
+
 // Blink the cursor at regular intervals
 bool on_cursor_timer(repeating_timer_t *rt)
 {
@@ -296,38 +376,122 @@ bool on_cursor_timer(repeating_timer_t *rt)
     return true;                      // Keep the timer running
 }
 
+#endif
 
 
-void text_scroll_up()
+//-------------------------------------------------------------------------------------------------
+
+static void input_delete_prev_char()
 {
-    cursor_erase();
+    if (gReadBufIx > 0)
+    {
+        if (gReadBufIx < gReadBufEndIx)
+        {
+            memmove(gReadBuf + gReadBufIx, gReadBuf + gReadBufIx + 1, gReadBufEndIx - gReadBufIx);
+        }
 
-    const int distance = gFont->Height;
+        --gReadBufIx;
+        --gReadBufEndIx;
 
-    lcd_scroll_up(distance);
-
-    if (gCursorY > distance)
-        gCursorY -= distance;
-    else
-        gCursorY = 0;
+        text_backspace();
+    }
 }
 
-void text_scroll_down()
+void input_move_cursor_left()
 {
-    cursor_erase();
-
-    const int distance = gFont->Height;
-
-    lcd_scroll_down(distance);
-
-    if (gCursorY + distance >= HEIGHT)
-        gCursorY = HEIGHT - distance;
-    else
-        gCursorY -= distance;
+    //TODO:
+    if (gReadBufIx > 0)
+return;
 }
+
+void input_move_cursor_right()
+{
+    //TODO:
+}
+
+// adds a (printable) character to the current cursor pos in our input line
+static void input_enter_char(char c)
+{
+    if (gReadBufIx < gReadBufEndIx)
+    {
+        memmove(gReadBuf + gReadBufIx + 1, gReadBuf + gReadBufIx, gReadBufEndIx - gReadBufIx);
+    }
+
+    gReadBuf[gReadBufIx] = c;
+    ++gReadBufIx;
+    ++gReadBufEndIx;
+
+    text_emit(c);
+}
+
+void input_process_char(char c)
+{
+    if (input_has_complete_line())
+        return;
+
+    switch (c)
+    {
+    //case '\r': case '\n':
+    case KEY_RETURN:
+        cursor_erase();
+        text_next_line();
+
+        // null-terminate and reremember that we have a complete line
+        gReadBuf[gReadBufEndIx] = 0;
+        gReadBufComplete = true;
+        return;
+
+    case KEY_BACKSPACE:
+        input_delete_prev_char();
+        break;
+    case KEY_DEL:
+        input_move_cursor_right();
+        input_delete_prev_char();
+        break;
+
+    default:
+        if ((gReadBufIx+1 < kReadBufSize) && (c >= 0x20) && (c < 0x7f))
+        {
+            input_enter_char(c);
+        }
+    }
+}
+
+
+bool input_has_complete_line()
+{
+    return gReadBufComplete;
+}
+
+const char* input_get_line()
+{
+    return gReadBuf;
+}
+
+void input_reset_line()
+{
+    //TODO: history_append_line(input_get_line());
+
+    gReadBufIx = 0;
+    gReadBufEndIx = 0;
+    gReadBuf[0] = 0;
+    gReadBufComplete = false;
+
+    text_emit_str("\n>");
+}
+
+//-------------------------------------------------------------------------------------------------
 
 void text_init()
 {
+    for (HistoryLine& line : gHistoryLines)
+        line.Valid = false;
+
+#if MLN_TARGET_PICO
     // Blink the cursor every second (500 ms on, 500 ms off)
     add_repeating_timer_ms(-500, on_cursor_timer, NULL, &cursor_timer);
+#endif
 }
+
+//-------------------------------------------------------------------------------------------------
+

@@ -1,8 +1,12 @@
 #pragma once
 
-
 #include <cstdint>
 
+//-------------------------------------------------------------------------------------------------
+
+typedef struct Font Font;
+
+//-------------------------------------------------------------------------------------------------
 
 void text_init();
 
@@ -27,8 +31,19 @@ void text_backspace();
 void text_emit(char c);
 void text_emit_str(const char* s);
 
+//-------------------------------------------------------------------------------------------------
+
 void cursor_draw();
 void cursor_erase();
 void cursor_enable(bool cursor_on);
 bool cursor_is_enabled();
+
+//-------------------------------------------------------------------------------------------------
+
+void input_process_char(char c);
+bool input_has_complete_line();
+const char* input_get_line();
+void input_reset_line();
+
+//-------------------------------------------------------------------------------------------------
 

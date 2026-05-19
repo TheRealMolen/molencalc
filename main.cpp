@@ -10,9 +10,10 @@
 #include "pico/bootrom.h"
 #include "pico/status_led.h"
 
-#include "drivers/picocalc.h"
+#include "drivers/font.h"
 #include "drivers/lcd.h"
 #include "drivers/keyboard.h"
+#include "drivers/picocalc.h"
 #include "drivers/text.h"
 
 #include "libcalc/libcalc.h"

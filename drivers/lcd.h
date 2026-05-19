@@ -1,8 +1,9 @@
 #pragma once
 
-#include "pico/stdlib.h"
-#include "font.h"
+#include <cstdint>
+#include "platform.h"
 
+//----------------------------------------------------------------------------------------
 
 // LCD display parameters
 #define WIDTH           (320)           // pixels across the LCD
@@ -13,10 +14,18 @@
 #define UPPER8(x)       ((x) >> 8)      // upper byte of a 16-bit value
 #define LOWER8(x)       ((x) & 0xFF)    // lower byte of a 16-bit value
 
+//----------------------------------------------------------------------------------------
 
 // Initialization
+bool lcd_init();
+void lcd_cleanup();
+
+#ifdef MLN_TARGET_PC
+typedef struct SDL_Window SDL_Window;
+void lcd_refresh(SDL_Window* window);
+#endif
+
 void lcd_clear_screen(uint16_t col = 0);
-void lcd_init();
 
 // Low-level drawing
 void lcd_blit(const uint16_t *pixels, int x, int y, int width, int height);
@@ -28,3 +37,5 @@ void lcd_scroll_reset();
 void lcd_scroll_clear(uint16_t col = 0);
 void lcd_scroll_up(uint32_t distance, uint16_t clearCol = 0);
 void lcd_scroll_down(uint32_t distance, uint16_t clearCol = 0);
+
+//----------------------------------------------------------------------------------------

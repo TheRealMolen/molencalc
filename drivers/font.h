@@ -14,14 +14,14 @@ extern "C" {
 
 //----------------------------------------------------------------------------------------
 
-typedef struct
+typedef struct Font
 {
     uint8_t Width;
     uint8_t Height;
     uint8_t Glyphs[];
 } Font;
 
-typedef struct 
+typedef struct GlyphMetric
 {
     uint8_t Skip;
     uint8_t Advance;

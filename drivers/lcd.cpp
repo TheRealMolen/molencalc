@@ -95,9 +95,10 @@ void lcd_write16_buf(const uint16_t *buffer, size_t len);
 
 static bool lcd_initialised = false; // flag to indicate if the LCD is initialised
 
-static uint16_t lcd_scroll_top = 0;                      // top fixed area for vertical scrolling
-static uint16_t lcd_memory_scroll_height = FRAME_HEIGHT; // scroll area height
-static uint16_t lcd_scroll_bottom = 0;                   // bottom fixed area for vertical scrolling
+// TODO: reinstate support for frozen top/bottom areas
+//static uint16_t lcd_scroll_top = 0;                      // top fixed area for vertical scrolling
+//static uint16_t lcd_memory_scroll_height = FRAME_HEIGHT; // scroll area height
+//static uint16_t lcd_scroll_bottom = 0;                   // bottom fixed area for vertical scrolling
 static uint16_t lcd_y_offset = 0;                        // offset for vertical scrolling
 
 // Background processing
@@ -221,24 +222,33 @@ static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 void lcd_blit(const uint16_t *pixels, int x, int y, int width, int height)
 {
     lcd_disable_interrupts();
-    if (y >= lcd_scroll_top && y < HEIGHT - lcd_scroll_bottom)
+
+    // TODO: reinstate support for frozen top & bottom areas
+    
+    int y_framebuf = (y + lcd_y_offset);
+    if (y_framebuf >= FRAME_HEIGHT)
+        y_framebuf -= FRAME_HEIGHT;
+
+    // cope with dest area wrapping around end of frame buf
+    const int overflow = (y_framebuf + height) - FRAME_HEIGHT;
+    if (overflow <= 0)
     {
-        // Adjust y for vertical scroll offset and wrap within memory height
-        uint16_t y_virtual = (lcd_y_offset + y) % lcd_memory_scroll_height;
-        uint16_t y_end = lcd_scroll_top + y_virtual + height - 1;
-        if (y_end >= lcd_scroll_top + lcd_memory_scroll_height)
-        {
-            y_end = lcd_scroll_top + lcd_memory_scroll_height - 1;
-        }
-        lcd_set_window(x, lcd_scroll_top + y_virtual, x + width - 1, y_end);
+        lcd_set_window(x, y_framebuf, x + width - 1, y_framebuf + height - 1);
+        lcd_write16_buf(pixels, width * height);
     }
     else
     {
-        // No vertical scrolling, use the actual y-coordinate
-        lcd_set_window(x, y, x + width - 1, y + height - 1);
+        const uint16_t height_btm = overflow;
+        const uint16_t height_top = height - overflow;
+
+        lcd_set_window(x, y_framebuf, x + width - 1, FRAME_HEIGHT - 1);
+        lcd_write16_buf(pixels, width * height_top);
+
+        const uint16_t* pixels_btm = pixels + (width * height_top);
+        lcd_set_window(x, 0, x + width - 1, height_btm - 1);
+        lcd_write16_buf(pixels_btm, width * height_btm);
     }
 
-    lcd_write16_buf((uint16_t *)pixels, width * height);
     lcd_enable_interrupts();
 }
 
@@ -270,28 +280,32 @@ void lcd_rect(int x, int y, int width, int height, uint16_t col)
 
 void lcd_define_scrolling(uint16_t top_fixed_area, uint16_t bottom_fixed_area)
 {
-    uint16_t scroll_area = HEIGHT - (top_fixed_area + bottom_fixed_area);
-    if (scroll_area == 0 || scroll_area > FRAME_HEIGHT)
-    {
-        // Invalid scrolling area, reset to full screen
-        top_fixed_area = 0;
-        bottom_fixed_area = 0;
-        scroll_area = FRAME_HEIGHT;
-    }
+    // TODO: reinstate support for frozen top/bottom areas
+    top_fixed_area = 0;
+    bottom_fixed_area = 0;
+
+    // uint16_t scroll_area = HEIGHT - (top_fixed_area + bottom_fixed_area);
+    // if (scroll_area == 0 || scroll_area > FRAME_HEIGHT)
+    // {
+    //     // Invalid scrolling area, reset to full screen
+    //     top_fixed_area = 0;
+    //     bottom_fixed_area = 0;
+    //     scroll_area = FRAME_HEIGHT;
+    // }
     
-    lcd_scroll_top = top_fixed_area;
-    lcd_memory_scroll_height = FRAME_HEIGHT - (top_fixed_area + bottom_fixed_area);
-    lcd_scroll_bottom = bottom_fixed_area;
+    // lcd_scroll_top = top_fixed_area;
+    // lcd_memory_scroll_height = FRAME_HEIGHT - (top_fixed_area + bottom_fixed_area);
+    // lcd_scroll_bottom = bottom_fixed_area;
 
     lcd_disable_interrupts();
     lcd_write_cmd(LCD_CMD_VSCRDEF);
     lcd_write_data(6,
-                   UPPER8(lcd_scroll_top),
-                   LOWER8(lcd_scroll_top),
-                   UPPER8(scroll_area),
-                   LOWER8(scroll_area),
-                   UPPER8(lcd_scroll_bottom),
-                   LOWER8(lcd_scroll_bottom));
+                   UPPER8(top_fixed_area),
+                   LOWER8(top_fixed_area),
+                   UPPER8(FRAME_HEIGHT),
+                   LOWER8(FRAME_HEIGHT),
+                   UPPER8(bottom_fixed_area),
+                   LOWER8(bottom_fixed_area));
     lcd_enable_interrupts();
 
     lcd_scroll_reset(); // Reset the scroll area to the top
@@ -301,7 +315,7 @@ void lcd_scroll_reset()
 {
     // Clear the scrolling area by filling it with the background colour
     lcd_y_offset = 0; // Reset the scroll offset
-    uint16_t scroll_area_start = lcd_scroll_top + lcd_y_offset;
+    uint16_t scroll_area_start = lcd_y_offset;
 
     lcd_disable_interrupts();
     lcd_write_cmd(LCD_CMD_VSCSAD); // Sets where in display RAM the scroll area starts
@@ -314,19 +328,15 @@ void lcd_scroll_clear(uint16_t col)
     lcd_scroll_reset(); // Reset the scroll area to the top
 
     // Clear the scrolling area
-    lcd_rect(0, lcd_scroll_top, WIDTH, lcd_memory_scroll_height, col);
+    lcd_rect(0, 0, WIDTH, HEIGHT, col);
 }
 
 // Scroll the screen up (make space at the bottom)
 void lcd_scroll_up(uint32_t distance, uint16_t clearCol)
 {
-    // Ensure the scroll height is non-zero to avoid division by zero
-    if (lcd_memory_scroll_height == 0) {
-        return; // Exit early if the scroll height is invalid
-    }
     // This will rotate the content in the scroll area up by one line
-    lcd_y_offset = (lcd_y_offset + distance) % lcd_memory_scroll_height;
-    uint16_t scroll_area_start = lcd_scroll_top + lcd_y_offset;
+    lcd_y_offset = (lcd_y_offset + distance) % FRAME_HEIGHT;
+    uint16_t scroll_area_start = lcd_y_offset;
 
     lcd_disable_interrupts();
     lcd_write_cmd(LCD_CMD_VSCSAD); // Sets where in display RAM the scroll area starts
@@ -340,13 +350,9 @@ void lcd_scroll_up(uint32_t distance, uint16_t clearCol)
 // Scroll the screen down one line (making space at the top)
 void lcd_scroll_down(uint32_t distance, uint16_t clearCol)
 {
-    // Ensure lcd_memory_scroll_height is non-zero to avoid division by zero
-    if (lcd_memory_scroll_height == 0) {
-        return;
-    }
     // This will rotate the content in the scroll area down by one line
-    lcd_y_offset = (lcd_y_offset - distance + lcd_memory_scroll_height) % lcd_memory_scroll_height;
-    uint16_t scroll_area_start = lcd_scroll_top + lcd_y_offset;
+    lcd_y_offset = (lcd_y_offset - distance + FRAME_HEIGHT) % FRAME_HEIGHT;
+    uint16_t scroll_area_start = lcd_y_offset;
 
     lcd_disable_interrupts();
     lcd_write_cmd(LCD_CMD_VSCSAD); // Sets where in display RAM the scroll area starts
@@ -354,7 +360,7 @@ void lcd_scroll_down(uint32_t distance, uint16_t clearCol)
     lcd_enable_interrupts();
 
     // Clear the new line at the top
-    lcd_rect(0, lcd_scroll_top, WIDTH, distance, clearCol);
+    lcd_rect(0, 0, WIDTH, distance, clearCol);
 }
 
 //
@@ -402,12 +408,10 @@ void lcd_display_off()
 
 
 // Initialize the LCD display
-void lcd_init()
+bool lcd_init()
 {
     if (lcd_initialised)
-    {
-        return; // already initialized
-    }
+        return true; // already initialized
 
     // initialise GPIO
     gpio_init(LCD_SCL);
@@ -471,4 +475,5 @@ void lcd_init()
     lcd_display_on();
 
     lcd_initialised = true; // Set the initialised flag
+    return true;
 }
