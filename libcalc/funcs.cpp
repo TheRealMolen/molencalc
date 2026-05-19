@@ -214,7 +214,7 @@ UserFunctionIt function_next(UserFunctionIt it)
     if (!it)
         return nullptr;
 
-    for (++it; it <= gUserFuncs + kMaxUserFuncs; ++it)
+    for (++it; it < gUserFuncs + kMaxUserFuncs; ++it)
     {
         if (it->IsUsed)
             return it;

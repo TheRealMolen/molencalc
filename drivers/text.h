@@ -11,8 +11,6 @@ typedef struct Font Font;
 void text_init();
 
 void text_scroll_up();
-void text_scroll_down();
-
 
 void text_set_foreground(uint16_t colour);
 void text_set_background(uint16_t colour);
@@ -31,6 +29,9 @@ void text_backspace();
 void text_emit(char c);
 void text_emit_str(const char* s);
 
+// wipe any in-progress text input and optionally display the supplied prompt
+void text_clear_line(const char* prompt);
+
 //-------------------------------------------------------------------------------------------------
 
 void cursor_draw();
@@ -40,7 +41,7 @@ bool cursor_is_enabled();
 
 //-------------------------------------------------------------------------------------------------
 
-void input_process_char(char c);
+void input_process_char(int c);
 bool input_has_complete_line();
 const char* input_get_line();
 void input_reset_line();

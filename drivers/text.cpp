@@ -33,24 +33,25 @@ static int gCursorX = 0;
 static int gCursorY = 0;
 static int8_t gCursorWidth = gFont->Width;
 
+static bool gCursorEnabled = true; // cursor visibility state
+
 #if MLN_TARGET_PICO
-static repeating_timer_t cursor_timer;
+static repeating_timer_t gCursorTimer;
 #endif
 
 //----------------------------------------------------------------------------------------
 // Line editing
-constexpr int kMaxColIx = (WIDTH/2) - 1;
-constexpr int kMaxLinesInBuf = 16;
-int8_t gColWidths[kMaxColIx+1];
-uint16_t gLineEndX[kMaxLinesInBuf];
-int16_t gCurrColIx = 0;
-int16_t gCurrLineIx = 0;
+//
 
-constexpr int kReadBufSize = 256;
-int16_t gReadBufIx = 0;     // the index of the cursor within the readbuf
-int16_t gReadBufEndIx = 0;  // the index of the final character in the readbuf
-bool gReadBufComplete = false;
-char gReadBuf[kReadBufSize] = {0};
+// this info is all about the current input "line". that "line" can span multiple screen lines
+constexpr int kMaxInputLen = 255;
+
+char gInputBuf[kMaxInputLen + 1] = {0}; // the input read buffer
+int16_t gInputEditIx = 0;               // the index of the cursor within the readbuf
+int16_t gInputLen = 0;                  // the index of the final character in the readbuf
+int16_t gInputStartY = 0;                // the y value of the start of this input line. used when clearing and resetting.
+
+bool gInputTextComplete = false;        // set to true when gInputBuf[gInputLen] has been set to 0 to terminate the string
 
 //----------------------------------------------------------------------------------------
 // Input history
@@ -73,6 +74,21 @@ int gNextHistoryWriteChar = 0;
 HistoryLine gHistoryLines[kHistoryMaxLines];
 int gCurrHistoryLine = 0;
 
+void history_add_line(const char* line);
+const char* history_prev();
+const char* history_next();
+
+//----------------------------------------------------------------------------------------
+
+static inline constexpr bool is_printable(char c)
+{
+    return (c >= ' ') && (c < 0x7f);
+}
+
+static inline bool in_edit_mode()
+{
+    return gInputEditIx != gInputLen;
+}
 
 //----------------------------------------------------------------------------------------
 
@@ -106,24 +122,13 @@ void text_scroll_up()
 
     lcd_scroll_up(distance);
 
+    const int startY = gCursorY;
     if (gCursorY > distance)
         gCursorY -= distance;
     else
         gCursorY = 0;
-}
 
-void text_scroll_down()
-{
-    cursor_erase();
-
-    const int distance = gFont->Height;
-
-    lcd_scroll_down(distance);
-
-    if (gCursorY + distance >= HEIGHT)
-        gCursorY = HEIGHT - distance;
-    else
-        gCursorY += distance;
+    gInputStartY -= (gCursorY - startY);
 }
 
 //----------------------------------------------------------------------------------------
@@ -159,8 +164,6 @@ uint8_t text_putc(int x, int y, uint8_t c)
 }
 
 
-
-
 void text_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh) 
 {
     // we draw the image line-by-line
@@ -177,6 +180,7 @@ void text_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh)
         { 
             lcd_scroll_up(1); 
             gCursorY -= 1;
+            gInputStartY -= 1;
         }
 
         const int img_left = (int)(WIDTH - imgw - 1);
@@ -190,43 +194,26 @@ void text_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh)
 } 
 
 
+//-------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
 
 
 void text_inc_column(uint8_t advance)
 {
-    gCursorX += advance;
-
-    gColWidths[gCurrColIx] = advance;
-    ++gCurrColIx;
-
-    if (gCursorX >= WIDTH || gCurrColIx >= kMaxColIx)
-    {
-        gCursorX = 0;
-        gCursorY += gFont->Height;
-
-        // TODO: this breaks backspace from one line to the previous
-        // ideally we'd remember the start ix of each line and only reset when flushing
-        gCurrColIx = 0;
-    }
-}
-
-void text_backspace()
-{
-    if (gCurrColIx <= 0)
+    if (gInputLen >= kMaxInputLen)
         return;
 
-    cursor_erase();
+    gCursorX += advance;
 
-    --gCurrColIx;
+    if (gCursorX >= WIDTH)
+    {
+        gCursorX = 0;
 
-    const int glyphWidth = gColWidths[gCurrColIx];
-    gCursorX -= glyphWidth;
-
-    lcd_rect(gCursorX, gCursorY, glyphWidth, gFont->Height, gBgCol);
-
-    cursor_draw();
+        gCursorY += gFont->Height;
+        if (gCursorY >= HEIGHT)
+            text_scroll_up();
+    }
 }
-
 
 static void text_next_line()
 {
@@ -236,8 +223,9 @@ static void text_next_line()
     while (gCursorY >= (HEIGHT - glyph_height))
         text_scroll_up();
 
-    gCurrColIx = 0;
     gCursorX = 0;
+
+    gInputStartY = gCursorY;
 }
 
 static void text_next_tab()
@@ -247,7 +235,6 @@ static void text_next_tab()
     if (gCursorX >= (WIDTH - tabwidth))
     {
         gCursorX = 0;
-        gCurrColIx = 0;
         text_next_line();
     }
     else
@@ -256,43 +243,38 @@ static void text_next_tab()
     }
 }
 
+//-------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
+
+static void _emit_char(char c)
+{
+    switch (c)
+    {
+    //case '\b':  text_backspace();   return;
+    case '\t':  text_next_tab();    return;
+    case '\n':  text_next_line();   return;
+    }
+
+    if (!is_printable(c))
+        return;
+
+    // if this char would end off the screen, advance to the next line immediately
+    const GlyphMetric metric = font_get_glyph_metric(gFont, c, gMonospace);
+    if (gCursorX + metric.Advance >= WIDTH)
+    {
+        text_inc_column(metric.Advance);
+    }
+
+    const uint8_t advance = text_putc(gCursorX, gCursorY, c);
+    text_inc_column(advance);
+}
 
 
 void text_emit(char c)
 {
     cursor_erase(); // erase the cursor before processing the character
 
-    switch (c)
-    {
-    case '\b':
-        text_backspace();
-        break;
-
-    case '\t':
-        text_next_tab();
-        break;
-
-    case '\n':
-        text_next_line();
-        break;
-
-    default:
-        if (c >= 0x20 && c < 0x7F) // printable characters
-        {
-            // TODO: refactor this; should all be in a single call!
-
-            // if this char would end off the screen, advance to the next line immediately
-            const GlyphMetric metric = font_get_glyph_metric(gFont, c, gMonospace);
-            if (gCursorX + metric.Advance >= WIDTH)
-            {
-                text_inc_column(metric.Advance);
-            }
-
-            const uint8_t advance = text_putc(gCursorX, gCursorY, c);
-            text_inc_column(advance);
-        }
-        break;
-    }
+    _emit_char(c);
 
     cursor_draw();
 }
@@ -302,31 +284,49 @@ void text_emit_str(const char* s)
     if (!s)
         return;
     
+    cursor_erase();
+
     for (; *s; ++s)
-        text_emit(*s);
+        _emit_char(*s);
+
+    cursor_draw();
 }
 
+void text_clear_line(const char* prompt)
+{
+    int input_height = (gCursorY - gInputStartY) + gFont->Height;
+    lcd_rect(0, gInputStartY, WIDTH, input_height, 0);
 
-static bool cursor_enabled = true; // cursor visibility state
+    gCursorX = 0;
+    gCursorY = gInputStartY;
+
+    if (prompt)
+        text_emit_str(prompt);
+}
+
+//-------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
+// C U R S O R
+//
 
 // Enable or disable the cursor
 void cursor_enable(bool cursor_on)
 {
     // Cursor visibility is not implemented, but we can toggle the state
-    cursor_enabled = cursor_on;
+    gCursorEnabled = cursor_on;
 }
 
 // Check if the cursor is enabled
 bool cursor_is_enabled()
 {
     // Return the current cursor visibility state
-    return cursor_enabled;
+    return gCursorEnabled;
 }
 
 
 static void blit_cursor(uint16_t col)
 {
-    if (!cursor_enabled)
+    if (!gCursorEnabled)
         return;
 
     lcd_rect(gCursorX, gCursorY + gFont->Height - 1, gFont->Width, 1, col);
@@ -343,13 +343,6 @@ void cursor_erase()
 {
     blit_cursor(gBgCol);
 }
-
-
-//
-//  Background processing
-//
-//  Handle background tasks such as blinking the cursor
-//
 
 #if MLN_TARGET_PICO
 
@@ -381,50 +374,66 @@ bool on_cursor_timer(repeating_timer_t *rt)
 
 //-------------------------------------------------------------------------------------------------
 
+static void input_redraw()
+{
+    cursor_erase();
+    text_clear_line(">");
+
+    for (int i=0; i<gInputLen; ++i)
+        _emit_char(gInputBuf[i]);
+
+    cursor_draw();
+}
+
 static void input_delete_prev_char()
 {
-    if (gReadBufIx > 0)
+    if (gInputEditIx <= 0)
+        return;
+
+    if (gInputEditIx < gInputLen)
     {
-        if (gReadBufIx < gReadBufEndIx)
-        {
-            memmove(gReadBuf + gReadBufIx, gReadBuf + gReadBufIx + 1, gReadBufEndIx - gReadBufIx);
-        }
-
-        --gReadBufIx;
-        --gReadBufEndIx;
-
-        text_backspace();
+        memmove(gInputBuf + gInputEditIx, gInputBuf + gInputEditIx + 1, gInputLen - gInputEditIx);
     }
+
+    --gInputEditIx;
+    --gInputLen;
+
+    input_redraw();
 }
 
 void input_move_cursor_left()
 {
-    //TODO:
-    if (gReadBufIx > 0)
-return;
+    //TODO: hide cursor, update cursor x & y, show cursor
+    if (gInputEditIx > 0)
+        --gInputEditIx;
 }
 
 void input_move_cursor_right()
 {
-    //TODO:
+    //TODO: hide cursor, update cursor x & y, show cursor
+    if (gInputEditIx > 0)
+        --gInputEditIx;
 }
 
 // adds a (printable) character to the current cursor pos in our input line
 static void input_enter_char(char c)
 {
-    if (gReadBufIx < gReadBufEndIx)
+    if (gInputLen+1 >= kMaxInputLen)
+        return;
+
+    if (gInputEditIx < gInputLen)
     {
-        memmove(gReadBuf + gReadBufIx + 1, gReadBuf + gReadBufIx, gReadBufEndIx - gReadBufIx);
+        memmove(gInputBuf + gInputEditIx + 1, gInputBuf + gInputEditIx, gInputLen - gInputEditIx);
     }
 
-    gReadBuf[gReadBufIx] = c;
-    ++gReadBufIx;
-    ++gReadBufEndIx;
+    gInputBuf[gInputEditIx] = c;
+    ++gInputEditIx;
+    ++gInputLen;
 
     text_emit(c);
 }
 
-void input_process_char(char c)
+void input_process_char(int c)
 {
     if (input_has_complete_line())
         return;
@@ -437,8 +446,8 @@ void input_process_char(char c)
         text_next_line();
 
         // null-terminate and reremember that we have a complete line
-        gReadBuf[gReadBufEndIx] = 0;
-        gReadBufComplete = true;
+        gInputBuf[gInputLen] = 0;
+        gInputTextComplete = true;
         return;
 
     case KEY_BACKSPACE:
@@ -449,8 +458,14 @@ void input_process_char(char c)
         input_delete_prev_char();
         break;
 
+    case KEY_UP:
+        //TODO: writeme
+        gInputEditIx = gInputLen = 0;
+        text_clear_line(">");
+        break;
+
     default:
-        if ((gReadBufIx+1 < kReadBufSize) && (c >= 0x20) && (c < 0x7f))
+        if (is_printable(c))
         {
             input_enter_char(c);
         }
@@ -460,24 +475,41 @@ void input_process_char(char c)
 
 bool input_has_complete_line()
 {
-    return gReadBufComplete;
+    return gInputTextComplete;
 }
 
 const char* input_get_line()
 {
-    return gReadBuf;
+    return gInputBuf;
 }
 
 void input_reset_line()
 {
     //TODO: history_append_line(input_get_line());
 
-    gReadBufIx = 0;
-    gReadBufEndIx = 0;
-    gReadBuf[0] = 0;
-    gReadBufComplete = false;
+    gInputEditIx = 0;
+    gInputLen = 0;
+    gInputBuf[0] = 0;
+    gInputTextComplete = false;
 
     text_emit_str("\n>");
+}
+
+//-------------------------------------------------------------------------------------------------
+
+void history_add_line(const char* line)
+{
+    (void)line;
+}
+
+const char* history_prev()
+{
+    return nullptr;
+}
+
+const char* history_next()
+{
+    return nullptr;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -489,7 +521,7 @@ void text_init()
 
 #if MLN_TARGET_PICO
     // Blink the cursor every second (500 ms on, 500 ms off)
-    add_repeating_timer_ms(-500, on_cursor_timer, NULL, &cursor_timer);
+    add_repeating_timer_ms(-500, on_cursor_timer, NULL, &gCursorTimer);
 #endif
 }
 

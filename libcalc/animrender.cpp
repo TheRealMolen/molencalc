@@ -11,7 +11,7 @@
 #if MLN_TARGET_PC
 // defined in the main SDL wrapper
 extern SDL_Window* gWindow;
-extern bool handle_input();
+extern bool handle_input(bool *outAnyInput);
 extern void render();
 #endif
 
@@ -117,12 +117,6 @@ AnimRenderer::AnimRenderer(float minX, float maxX, float minY, float maxY)
     , mX( mAxisX, 0, IMGW - 1)
     , mY( mAxisY, IMGW - 1, 0)
 {
-#if MLN_TARGET_PC
-    mSurf = SDL_CreateRGBSurfaceWithFormat(0, IMGW, IMGH, 16, SDL_PIXELFORMAT_RGB565);
-    if (!mSurf)
-        return;
-#endif
-
     lcd_scroll_clear();
     cursor_enable(false);
 
@@ -130,11 +124,6 @@ AnimRenderer::AnimRenderer(float minX, float maxX, float minY, float maxY)
 
 AnimRenderer::~AnimRenderer()
 {
-#if MLN_TARGET_PC
-    SDL_FreeSurface(mSurf);
-    mSurf = nullptr;
-#endif
-
     cursor_enable(true);
 }
 
@@ -167,7 +156,9 @@ bool AnimRenderer::check_for_break()
 {
 #if defined(MLN_TARGET_PC)
 
-    return handle_input() == false;
+    bool anyInput = false;
+    handle_input(&anyInput);
+    return anyInput;
 
 #elif defined(MLN_TARGET_PICO)
 

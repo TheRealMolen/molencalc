@@ -45,30 +45,34 @@ void str_to_lower(char *s) {
 }
 
 
-void readline(char *buffer, size_t size)
+void readline()
 {
-    size_t index = 0;
     for (;;)
     {
-        char ch = getchar();
-        if (ch == '\n' || ch == '\r')
-        {
-            printf("\n");
-            break; // End of line
-        }
-        else if ((ch == KEY_BACKSPACE || ch == 0x7f) && index > 0)
-        {
-            index--;
-            buffer[index] = '\0'; // Remove last character
-            printf("\b \b"); // Erase the last character
-        }
-        else if (ch >= 0x20 && ch < 0x7F && index < size - 1) // Printable characters
-        {
-            buffer[index++] = ch;
-            putchar(ch);
-        }
+        const char c = getchar();
+        input_process_char(c);
+
+        if (input_has_complete_line())
+            return;
+
+        // if (ch == '\n' || ch == '\r')
+        // {
+        //     printf("\n");
+        //     break; // End of line
+        // }
+        // else if ((ch == KEY_BACKSPACE || ch == 0x7f) && index > 0)
+        // {
+        //     index--;
+        //     buffer[index] = '\0'; // Remove last character
+        //     printf("\b \b"); // Erase the last character
+        // }
+        // else if (ch >= 0x20 && ch < 0x7F && index < size - 1) // Printable characters
+        // {
+        //     buffer[index++] = ch;
+        //     putchar(ch);
+        // }
     }
-    buffer[index] = '\0'; // Null-terminate the string
+    //buffer[index] = '\0'; // Null-terminate the string
 }
 
 
@@ -97,8 +101,7 @@ static bool cmd_small(const char*)
 
 int main()
 {
-    char inputBuf[256];
-    char outputBuf[512];
+    char outputBuf[1024];
 
     init_platform();
 
@@ -107,28 +110,26 @@ int main()
     register_calc_cmd(cmd_small, "small", "", "switches to small text");
     register_calc_cmd(cmd_bye, "bye", "", "resets to BOOTSEL");
 
-    printf(MCALC_WELCOME);
+    text_emit_str(MCALC_WELCOME);
+
+    reset_plot();
 
     for (;;)
     {
-        printf("\n>");
-
-        readline(inputBuf, sizeof(inputBuf));
-        if (strlen(inputBuf) == 0)
-            continue; // Skip empty input
-
-        reset_plot();
+        readline();
 
         cursor_erase();
         
-        calc_eval(inputBuf, outputBuf, sizeof(outputBuf));
-        puts(outputBuf);
+        calc_eval(input_get_line(), outputBuf, sizeof(outputBuf));
+        text_emit_str(outputBuf);
 
-        const Plot* plot = get_plot();
-        if (plot)
+        if (const Plot* plot = get_plot())
         {
             cursor_erase();
             text_put_image(plot->Pixels, MC_PLOT_WIDTH, MC_PLOT_HEIGHT);
+            reset_plot();
         }
+
+        input_reset_line();
     }
 }

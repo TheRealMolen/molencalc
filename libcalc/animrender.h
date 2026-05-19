@@ -5,10 +5,6 @@
 
 #include <cstdint>
 
-#if MLN_TARGET_PC
-#include <SDL.h>
-#endif
-
 
 //-------------------------------------------------------------------------------------------------
 
@@ -96,10 +92,6 @@ public:
 
 private:
     TinyScopeFrameBuf mFb;
-
-#if MLN_TARGET_PC
-    SDL_Surface* mSurf = nullptr;
-#endif
 
     const PlotAxis mAxisX, mAxisY;
     const FastAxis mX, mY;
