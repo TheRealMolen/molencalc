@@ -54,25 +54,7 @@ void readline()
 
         if (input_has_complete_line())
             return;
-
-        // if (ch == '\n' || ch == '\r')
-        // {
-        //     printf("\n");
-        //     break; // End of line
-        // }
-        // else if ((ch == KEY_BACKSPACE || ch == 0x7f) && index > 0)
-        // {
-        //     index--;
-        //     buffer[index] = '\0'; // Remove last character
-        //     printf("\b \b"); // Erase the last character
-        // }
-        // else if (ch >= 0x20 && ch < 0x7F && index < size - 1) // Printable characters
-        // {
-        //     buffer[index++] = ch;
-        //     putchar(ch);
-        // }
     }
-    //buffer[index] = '\0'; // Null-terminate the string
 }
 
 
@@ -111,8 +93,7 @@ int main()
     register_calc_cmd(cmd_bye, "bye", "", "resets to BOOTSEL");
 
     text_emit_str(MCALC_WELCOME);
-
-    reset_plot();
+    input_reset_line();
 
     for (;;)
     {
@@ -120,6 +101,7 @@ int main()
 
         cursor_erase();
         
+        reset_plot();
         calc_eval(input_get_line(), outputBuf, sizeof(outputBuf));
         text_emit_str(outputBuf);
 
@@ -127,7 +109,6 @@ int main()
         {
             cursor_erase();
             text_put_image(plot->Pixels, MC_PLOT_WIDTH, MC_PLOT_HEIGHT);
-            reset_plot();
         }
 
         input_reset_line();

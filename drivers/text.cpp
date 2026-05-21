@@ -166,6 +166,8 @@ uint8_t text_putc(int x, int y, uint8_t c)
 
 void text_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh) 
 {
+    cursor_erase();
+
     // we draw the image line-by-line
     // partly because it makes it animate nice, and partly because 
     // figuring out the appropriate logic to wrap the image around the frame
@@ -196,7 +198,6 @@ void text_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh)
 
 //-------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------
-
 
 void text_inc_column(uint8_t advance)
 {
@@ -329,7 +330,7 @@ static void blit_cursor(uint16_t col)
     if (!gCursorEnabled)
         return;
 
-    lcd_rect(gCursorX, gCursorY + gFont->Height - 1, gFont->Width, 1, col);
+    lcd_rect(gCursorX, gCursorY + gFont->Height - 1, gCursorWidth, 1, col);
 }
 
 // Draw the cursor at the current position
@@ -379,8 +380,33 @@ static void input_redraw()
     cursor_erase();
     text_clear_line(">");
 
+    int cursX = gCursorX;
+    int cursY = gCursorY;
+
     for (int i=0; i<gInputLen; ++i)
+    {
+        if (i == gInputEditIx)
+        {
+            cursX = gCursorX;
+            cursY = gCursorY;
+        }
+
         _emit_char(gInputBuf[i]);
+    }
+
+    if (in_edit_mode())
+    {
+        gCursorX = cursX;
+        gCursorY = cursY;
+
+        const char c = gInputBuf[gInputEditIx];
+        const GlyphMetric metric = font_get_glyph_metric(gFont, c, gMonospace);
+        gCursorWidth = metric.Advance;
+    }
+    else
+    {
+        gCursorWidth = gFont->Width;
+    } 
 
     cursor_draw();
 }
@@ -392,27 +418,27 @@ static void input_delete_prev_char()
 
     if (gInputEditIx < gInputLen)
     {
-        memmove(gInputBuf + gInputEditIx, gInputBuf + gInputEditIx + 1, gInputLen - gInputEditIx);
+        memmove(gInputBuf + gInputEditIx - 1, gInputBuf + gInputEditIx, gInputLen - gInputEditIx);
     }
 
     --gInputEditIx;
     --gInputLen;
-
-    input_redraw();
 }
 
 void input_move_cursor_left()
 {
-    //TODO: hide cursor, update cursor x & y, show cursor
     if (gInputEditIx > 0)
         --gInputEditIx;
+    else
+        gInputEditIx = 0;
 }
 
 void input_move_cursor_right()
 {
-    //TODO: hide cursor, update cursor x & y, show cursor
-    if (gInputEditIx > 0)
-        --gInputEditIx;
+    if (gInputEditIx < gInputLen)
+        ++gInputEditIx;
+    else
+        gInputEditIx = gInputLen;
 }
 
 // adds a (printable) character to the current cursor pos in our input line
@@ -421,7 +447,7 @@ static void input_enter_char(char c)
     if (gInputLen+1 >= kMaxInputLen)
         return;
 
-    if (gInputEditIx < gInputLen)
+    if (in_edit_mode())
     {
         memmove(gInputBuf + gInputEditIx + 1, gInputBuf + gInputEditIx, gInputLen - gInputEditIx);
     }
@@ -430,7 +456,15 @@ static void input_enter_char(char c)
     ++gInputEditIx;
     ++gInputLen;
 
-    text_emit(c);
+    if (in_edit_mode())
+    {
+        input_redraw();
+    }
+    else
+    {
+        // just append the character
+        text_emit(c);
+    }
 }
 
 void input_process_char(int c)
@@ -452,16 +486,33 @@ void input_process_char(int c)
 
     case KEY_BACKSPACE:
         input_delete_prev_char();
+        input_redraw();
         break;
     case KEY_DEL:
-        input_move_cursor_right();
-        input_delete_prev_char();
+        if (in_edit_mode())
+        {
+            input_move_cursor_right();
+            input_delete_prev_char();
+            input_redraw();
+        }
         break;
 
     case KEY_UP:
         //TODO: writeme
         gInputEditIx = gInputLen = 0;
         text_clear_line(">");
+        break;
+    case KEY_DOWN:
+        //TODO: writeme
+        break;
+
+    case KEY_LEFT:
+        input_move_cursor_left();
+        input_redraw();
+        break;
+    case KEY_RIGHT:
+        input_move_cursor_right();
+        input_redraw();
         break;
 
     default:
