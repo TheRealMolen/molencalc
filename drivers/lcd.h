@@ -31,6 +31,8 @@ void lcd_clear_screen(uint16_t col = 0);
 void lcd_blit(const uint16_t *pixels, int x, int y, int width, int height);
 void lcd_rect(int x, int y, int w, int h, uint16_t col);
 
+void lcd_readback(int x, int y, int width, int height, uint16_t *out_pixels);
+
 // Scrolling
 void lcd_define_scrolling(uint16_t top_fixed_area, uint16_t bottom_fixed_area);
 void lcd_scroll_reset();

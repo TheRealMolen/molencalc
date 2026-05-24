@@ -12,7 +12,8 @@
 //        writing to the display RAM requires the minimum chip select high pulse width of 40ns.
 //
 
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
@@ -25,8 +26,8 @@
 
 // Raspberry Pi Pico board GPIO pins
 #define LCD_SCL         (10)            // serial clock (SCL)
-#define LCD_SDI         (11)            // serial data in (SDI)
-#define LCD_SDO         (12)            // serial data out (SDO)
+#define LCD_SDI         (11)            // serial data in (SDI) from mcu -> lcd. aka MISO, SDA, DIN
+#define LCD_SDO         (12)            // serial data out (SDO) from lcd -> mcu. aka MOSI, DOUT
 #define LCD_CSX         (13)            // chip select (CSX)
 #define LCD_DCX         (14)            // data/command (D/CX)
 #define LCD_RST         (15)            // reset (RESET)
@@ -35,20 +36,22 @@
 // LCD interface definitions
 // According to the ST7789P datasheet, the maximum SPI clock speed is 62.5 MHz.
 // However, the controller can handle 75 MHz in practice.
-#define LCD_BAUDRATE    (75000000)      // 75 MHz SPI clock speed
-#define LCD_I2C_TIMEOUT_US (1000)       // I2C timeout in microseconds
+#define LCD_BAUDRATE    (75*1000*1000)  // 75 MHz SPI clock speed
+#define LCD_READRATE    (12*1000*1000)  // slower SPI speed for reading. things get unstable as this gets faster
 
 // LCD command definitions
 #define LCD_CMD_NOP     (0x00)          // no operation
 #define LCD_CMD_SWRESET (0x01)          // software reset
+#define LCD_CMD_RDID    (0x04)          // Read Display ID
+#define LCD_CMD_RDDST   (0x09)          // Read Display Status
 #define LCD_CMD_SLPIN   (0x10)          // sleep in
 #define LCD_CMD_SLPOUT  (0x11)          // sleep out
 #define LCD_CMD_INVOFF  (0x20)          // display inversion off
 #define LCD_CMD_INVON   (0x21)          // display inversion on
 #define LCD_CMD_DISPOFF (0x28)          // display off
 #define LCD_CMD_DISPON  (0x29)          // display on
-#define LCD_CMD_CASET   (0x2A)          // column address set
-#define LCD_CMD_RASET   (0x2B)          // row address set
+#define LCD_CMD_COLADDRSET   (0x2A)     // column address set
+#define LCD_CMD_ROWADDRSET   (0x2B)     // row address set
 #define LCD_CMD_RAMWR   (0x2C)          // memory write
 #define LCD_CMD_RAMRD   (0x2E)          // memory read
 #define LCD_CMD_VSCRDEF (0x33)          // vertical scroll definition
@@ -67,6 +70,9 @@
 #define LCD_CMD_PWR2    (0xC1)          // power control 2
 #define LCD_CMD_PWR3    (0xC2)          // power control 3
 #define LCD_CMD_VCMPCTL (0xC5)          // VCOM control
+#define LCD_CMD_RDID1   (0xDA)          // read ID1
+#define LCD_CMD_RDID2   (0xDB)          // read ID2
+#define LCD_CMD_RDID3   (0xDC)          // read ID3
 #define LCD_CMD_PGC     (0xE0)          // positive gamma control
 #define LCD_CMD_NGC     (0xE1)          // negative gamma control
 #define LCD_CMD_DGC1    (0xE2)          // driver gamma control 1
@@ -90,6 +96,8 @@ void lcd_write_cmd(uint8_t cmd);
 void lcd_write_data(uint8_t len, ...);
 void lcd_write16_data(uint8_t len, ...);
 void lcd_write16_buf(const uint16_t *buffer, size_t len);
+
+uint8_t lcd_cmd_read1(uint8_t cmd);
 
 
 
@@ -184,6 +192,28 @@ void lcd_write16_buf(const uint16_t *buffer, size_t len)
     spi_set_format(LCD_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 }
 
+uint8_t lcd_cmd_read1(uint8_t cmd)
+{
+    gpio_put(LCD_CSX, 0);
+    gpio_put(LCD_DCX, 0);
+    spi_write_blocking(LCD_SPI, &cmd, 1);
+
+    gpio_put(LCD_DCX, 1);
+
+    const uint8_t dummyTx = 0xff;
+    uint8_t dummyRx = -1;
+
+    spi_read_blocking(LCD_SPI, dummyTx, &dummyRx, 1);
+
+    uint8_t out = 0xbb;
+    spi_read_blocking(LCD_SPI, dummyTx, &out, 1);
+
+    gpio_put(LCD_CSX, 1);
+
+    return out;
+}
+
+
 //
 //  ST7365P LCD controller functions
 //
@@ -192,19 +222,16 @@ void lcd_write16_buf(const uint16_t *buffer, size_t len)
 static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
     // Set column address (X)
-    lcd_write_cmd(LCD_CMD_CASET);
+    lcd_write_cmd(LCD_CMD_COLADDRSET);
     lcd_write_data(4,
                    UPPER8(x0), LOWER8(x0),
                    UPPER8(x1), LOWER8(x1));
 
     // Set row address (Y)
-    lcd_write_cmd(LCD_CMD_RASET);
+    lcd_write_cmd(LCD_CMD_ROWADDRSET);
     lcd_write_data(4,
                    UPPER8(y0), LOWER8(y0),
                    UPPER8(y1), LOWER8(y1));
-
-    // Prepare to write to RAM
-    lcd_write_cmd(LCD_CMD_RAMWR);
 }
 
 //
@@ -234,6 +261,8 @@ void lcd_blit(const uint16_t *pixels, int x, int y, int width, int height)
     if (overflow <= 0)
     {
         lcd_set_window(x, y_framebuf, x + width - 1, y_framebuf + height - 1);
+
+        lcd_write_cmd(LCD_CMD_RAMWR);
         lcd_write16_buf(pixels, width * height);
     }
     else
@@ -242,10 +271,12 @@ void lcd_blit(const uint16_t *pixels, int x, int y, int width, int height)
         const uint16_t height_top = height - overflow;
 
         lcd_set_window(x, y_framebuf, x + width - 1, FRAME_HEIGHT - 1);
+        lcd_write_cmd(LCD_CMD_RAMWR);
         lcd_write16_buf(pixels, width * height_top);
 
         const uint16_t* pixels_btm = pixels + (width * height_top);
         lcd_set_window(x, 0, x + width - 1, height_btm - 1);
+        lcd_write_cmd(LCD_CMD_RAMWR);
         lcd_write16_buf(pixels_btm, width * height_btm);
     }
 
@@ -265,6 +296,49 @@ void lcd_rect(int x, int y, int width, int height, uint16_t col)
     {
         lcd_blit(pixels, x, y + row, width, 1);
     }
+}
+
+
+void lcd_readback(int x, int y, int width, int height, uint16_t *out_pixels)
+{
+    lcd_disable_interrupts();
+    
+    int y_framebuf = (y + lcd_y_offset);
+    if (y_framebuf >= FRAME_HEIGHT)
+        y_framebuf -= FRAME_HEIGHT;
+
+    lcd_set_window(x, y_framebuf, x + width - 1, y_framebuf + height - 1);
+    
+    spi_set_baudrate(LCD_SPI, LCD_READRATE);
+
+    gpio_put(LCD_CSX, 0);
+    gpio_put(LCD_DCX, 0);
+    const uint8_t cmd = LCD_CMD_RAMRD;
+    spi_write_blocking(LCD_SPI, &cmd, 1);
+
+    gpio_put(LCD_DCX, 1);
+
+    for (int i=0; i<10000; ++i)
+        __nop();
+
+    const uint8_t dummyTx = 0;
+    uint8_t dummyRx = -1;
+
+    spi_read_blocking(LCD_SPI, dummyTx, &dummyRx, 1);
+
+    spi_set_format(LCD_SPI, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+
+    for (int i=0; i<10000; ++i)
+        __nop();
+
+    spi_read16_blocking(LCD_SPI, dummyTx, out_pixels, width * height);
+
+    gpio_put(LCD_CSX, 1);
+
+    spi_set_baudrate(LCD_SPI, LCD_BAUDRATE);
+    spi_set_format(LCD_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+
+    lcd_enable_interrupts();
 }
 
 //
@@ -382,7 +456,12 @@ void lcd_clear_screen(uint16_t col)
 // Reset the LCD display
 void lcd_reset()
 {
+    gpio_put(LCD_CSX, 1);
+
     // Blip the reset pin to reset the LCD controller
+    gpio_put(LCD_RST, 1);
+    busy_wait_us(20);
+
     gpio_put(LCD_RST, 0);
     busy_wait_us(20); // 20µs reset pulse (10µs minimum)
 
@@ -432,6 +511,7 @@ bool lcd_init()
     gpio_set_function(LCD_SCL, GPIO_FUNC_SPI);
     gpio_set_function(LCD_SDI, GPIO_FUNC_SPI);
     gpio_set_function(LCD_SDO, GPIO_FUNC_SPI);
+    gpio_set_input_hysteresis_enabled(LCD_SDO, true);
 
     gpio_put(LCD_CSX, 1);
     gpio_put(LCD_RST, 1);
@@ -439,9 +519,47 @@ bool lcd_init()
     lcd_disable_interrupts();
 
     lcd_reset(); // reset the LCD controller
-
+  
     lcd_write_cmd(LCD_CMD_SWRESET); // reset the commands and parameters to their S/W Reset default values
     busy_wait_us(10000);                   // required to wait at least 5ms
+
+#if 0
+    // extra setup cribbed from cw demo lcdspi.c
+    lcd_write_cmd(LCD_CMD_PGC);
+    lcd_write_data(15,
+        0x00, 0x03, 0x09, 0x08,
+        0x16, 0x0a, 0x3f, 0x78,
+        0x4c, 0x09, 0x0a, 0x08,
+        0x16, 0x1a,
+        0x0f);  // NOTE: ST7365P docs only specify 14 params... shrug
+
+    lcd_write_cmd(LCD_CMD_NGC);
+    lcd_write_data(15,
+        0x00, 0x16, 0x19, 0x03,
+        0x0F, 0x05, 0x32, 0x45,
+        0x46, 0x04, 0x0E, 0x0D,
+        0x35, 0x37, 0x0F);
+    
+    lcd_write_cmd(LCD_CMD_PWR1);
+    lcd_write_data(2, 0x17, 0x15);
+    lcd_write_cmd(LCD_CMD_PWR2);
+    lcd_write_data(1, 0x41);
+
+    lcd_write_cmd(LCD_CMD_VCMPCTL);
+    lcd_write_data(3, 0x00, 0x12, 0x80);
+
+    lcd_write_cmd(LCD_CMD_IFMODE);
+    lcd_write_data(1, 0x00);
+
+    lcd_write_cmd(LCD_CMD_FRMCTR1);
+    lcd_write_data(2, 0xA0, 0x00);
+
+    lcd_write_cmd(LCD_CMD_DIC);
+    lcd_write_data(1, 0x02);
+
+    lcd_write_cmd(LCD_CMD_DFC);
+    lcd_write_data(3, 0x02, 0x02, 0x3B);
+#endif
 
     lcd_write_cmd(LCD_CMD_COLMOD); // pixel format set
     lcd_write_data(1, 0x55);       // 16 bit/pixel (RGB565)
@@ -452,8 +570,8 @@ bool lcd_init()
     lcd_write_cmd(LCD_CMD_INVON); // display inversion on
 
     lcd_write_cmd(LCD_CMD_EMS); // entry mode set
-    lcd_write_data(1, 0xC6);    // normal display, 16-bit (RGB) to 18-bit (rgb) colour
-                                //   conversion: r(0) = b(0) = G(0)
+    lcd_write_data(1, 0x46);    // normal display, 16-bit (RGB) to 18-bit (rgb) colour
+                                //   conversion: r, b msb => lsb
 
     lcd_write_cmd(LCD_CMD_VSCRDEF); // vertical scroll definition
     lcd_write_data(6,
@@ -469,6 +587,23 @@ bool lcd_init()
 
     // Clear the screen
     lcd_clear_screen();
+
+    #if 0
+    // debug alignment check
+    //uint16_t stripes[] = { 0xffff, 0x0000, 0xa0a0, 0x0a0a, 0xc0c0, 0xacac, 0xf800, 0x0018 };
+    //   actual              ffff    0000    d0d0    0505    e0e0    d6d6    00fc    0c00
+    //uint16_t stripes[] = { 0xff00, 0x00ff, 0x0f0f, 0x0102, 0x0408, 0xf800, 0x07e0, 0x0018 };
+    //   actual              00ff    ff00    0707    0100    0402    00fc    f003    0c00
+    uint16_t stripes[] = { 0x0018, 0x0019, 0x001a, 0x001b, 0x001c, 0x0000, 0x0000, 0x0000 };
+    static_assert(sizeof(stripes) == 16);
+    for (int y = 0; y < HEIGHT; ++y)
+    {
+        for (int x = 0; x < WIDTH; x += 8)
+        {
+            lcd_blit(stripes, x, y, 8, 1);
+        }
+    }
+    #endif
 
     // Now that the display is initialized, display RAM garbage is cleared,
     // turn on the display

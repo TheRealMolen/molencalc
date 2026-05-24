@@ -37,12 +37,15 @@ pico_sdk_init()
 add_executable(molencalc
         main.cpp
 
+        drivers/clib.c
         drivers/keyboard.cpp
         drivers/keyboard.h
+        drivers/fat32.c
         drivers/lcd.cpp
         drivers/lcd.h
         drivers/picocalc.cpp
         drivers/picocalc.h
+        drivers/sdcard.c
         drivers/southbridge.c
         drivers/southbridge.h
         drivers/text.cpp

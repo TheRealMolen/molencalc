@@ -44,20 +44,6 @@ void str_to_lower(char *s) {
     }
 }
 
-
-void readline()
-{
-    for (;;)
-    {
-        const char c = getchar();
-        input_process_char(c);
-
-        if (input_has_complete_line())
-            return;
-    }
-}
-
-
 //-------------------------------------------------------------------------------------------------
 
 static bool cmd_bye(const char*)
@@ -78,8 +64,117 @@ static bool cmd_small(const char*)
     return true;
 }
 
+static bool cmd_screenshot(const char*)
+{
+    uint16_t pixels[WIDTH*HEIGHT];
+
+    lcd_readback(0, 0, WIDTH, HEIGHT, pixels);
+
+   /* {
+        char head[1024];
+        sprintf(head, "data starts: %04x %04x %04x %04x\n"
+                      "             %04x %04x %04x %04x\n",
+            int(pixels[0]), int(pixels[1]), int(pixels[2]), int(pixels[3]),
+            int(pixels[4]), int(pixels[5]), int(pixels[6]), int(pixels[7]));
+
+        text_emit_str(head);
+    }*/
+
+    FILE* fp = fopen("scr.data", "wb");
+    if (!fp)
+    {
+        text_emit_str("\nerr: unable to open screenshot file for writing\n");
+        return false;
+    }
+
+    size_t total_bytes = sizeof(pixels);
+    const char* outbuf = reinterpret_cast<char*>(pixels);
+    size_t total_written = 0;
+    for (;;)
+    {
+        size_t bytes_written = fwrite(outbuf, 1, total_bytes - total_written, fp);
+        total_written += bytes_written;
+        outbuf += bytes_written;
+        if (total_written == total_bytes)
+            break;
+
+        if (bytes_written == 0)
+        {
+            text_emit_str("Warning: write failed to write any bytes. abandoning...\n");
+            break;
+        }
+
+        text_emit_str("Warning: write to log needed another go...\n");
+    }
+
+    fclose(fp);
+
+    return true;
+}
+
 //-------------------------------------------------------------------------------------------------
 
+void log_to_settings(const char* str)
+{
+    FILE* log_fp = fopen("mc.log", "a");
+    if (!log_fp)
+    {
+        text_emit_str("\nerr: unable to open log for writing\n");
+        return;
+    }
+
+    size_t total_bytes = strlen(str);
+    size_t total_written = 0;
+    for (;;)
+    {
+        size_t bytes_written = fwrite(str + total_written, 1, total_bytes - total_written, log_fp);
+        total_written += bytes_written;
+        if (total_written == total_bytes)
+        {
+            fwrite("\n", 1, 1, log_fp);
+            break;
+        }
+
+        if (bytes_written == 0)
+        {
+            text_emit_str("Warning: write failed to write any bytes. abandoning...\n");
+            break;
+        }
+
+        text_emit_str("Warning: write to log needed another go...\n");
+    }
+
+    fclose(log_fp);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+void readline()
+{
+    for (;;)
+    {
+        const char c = getchar();
+
+        if (c == KEY_F1)
+        {
+            cmd_bye(nullptr);
+            continue;
+        }
+        else if (c == KEY_F5)
+        {
+            cmd_screenshot(nullptr);
+            input_reset_line();
+            continue;
+        }
+
+        input_process_char(c);
+
+        if (input_has_complete_line())
+            return;
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
 
 int main()
 {
@@ -91,6 +186,7 @@ int main()
     register_calc_cmd(cmd_big, "big", "", "switches to big text");
     register_calc_cmd(cmd_small, "small", "", "switches to small text");
     register_calc_cmd(cmd_bye, "bye", "", "resets to BOOTSEL");
+    register_calc_cmd(cmd_screenshot, "scr", "", "save a screenshot");
 
     text_emit_str(MCALC_WELCOME);
     input_reset_line();
@@ -100,6 +196,8 @@ int main()
         readline();
 
         cursor_erase();
+
+        log_to_settings(input_get_line());
         
         reset_plot();
         calc_eval(input_get_line(), outputBuf, sizeof(outputBuf));
