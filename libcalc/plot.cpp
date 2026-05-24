@@ -1,5 +1,8 @@
 #include "plot.h"
 
+#include "drivers/palette.h"
+#include "drivers/text.h"
+
 #include "funcs.h"
 
 //-------------------------------------------------------------------------------------------------
@@ -97,10 +100,12 @@ bool draw_plot(const char* func_name, const PlotAxis* xAxis, const PlotAxis* yAx
     if (!func)
         return false;
 
+    const Palette* pal = text_get_palette();
+
     constexpr int border = 4;
-    const uint16_t bgCol = 0x1862;
-    const uint16_t axisCol = 0x39c4;
-    const uint16_t lineCol = 0xff0a;
+    const uint16_t bgCol = pal->Cols[2];
+    const uint16_t axisCol = pal->Cols[3];
+    const uint16_t lineCol = pal->Cols[1];
 
     const FastAxis xAx(*xAxis, border, MC_PLOT_WIDTH - border - 1);
     const FastAxis yAx(*yAxis, MC_PLOT_HEIGHT - border - 1, border);

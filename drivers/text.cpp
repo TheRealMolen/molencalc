@@ -10,6 +10,7 @@
 #include "font.h"
 #include "keyboard.h"
 #include "lcd.h"
+#include "palette.h"
 #include "platform.h"
 
 #if MLN_TARGET_PICO
@@ -25,12 +26,14 @@ static uint16_t char_buffer[16 * FONT_MAX_HEIGHT] __attribute__((aligned(4)));
 static uint16_t gFgCol = 0xFF07;
 static uint16_t gBgCol = 0x0000;
 
+const Palette* gActivePalette = nullptr;
+
 static bool gMonospace = false;
 
 //----------------------------------------------------------------------------------------
 // Cursor
-static int gCursorX = 0;
-static int gCursorY = 0;
+static int gCursorX = 2;
+static int gCursorY = 2;
 static int8_t gCursorWidth = gFont->Width;
 
 static bool gCursorEnabled = true; // cursor visibility state
@@ -107,9 +110,33 @@ void text_set_background(uint16_t colour)
     gBgCol = colour;
 }
 
+uint16_t text_get_foreground()
+{
+    return gFgCol;
+}
+uint16_t text_get_background()
+{
+    return gBgCol;
+}
+
 void text_set_monospace(bool mono)
 {
     gMonospace = mono;
+}
+
+void text_set_palette(const Palette* palette)
+{
+    gActivePalette = palette;
+
+    if (palette)
+    {
+        gBgCol = palette->Cols[0];
+        gFgCol = palette->Cols[1];
+    }
+}
+const Palette* text_get_palette()
+{
+    return gActivePalette;
 }
 
 //----------------------------------------------------------------------------------------
@@ -120,7 +147,7 @@ void text_scroll_up()
 
     const int distance = gFont->Height;
 
-    lcd_scroll_up(distance);
+    lcd_scroll_up(distance, gBgCol);
 
     const int startY = gCursorY;
     if (gCursorY > distance)
@@ -187,6 +214,7 @@ void text_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh)
 
         const int img_left = (int)(WIDTH - imgw - 1);
 
+        lcd_rect(0, gCursorY, img_left - 1, 1, gBgCol);
         lcd_blit(next_pixels, img_left, gCursorY, imgw, line_height);
     
         gCursorY += line_height;
@@ -296,7 +324,7 @@ void text_emit_str(const char* s)
 void text_clear_line(const char* prompt)
 {
     int input_height = (gCursorY - gInputStartY) + gFont->Height;
-    lcd_rect(0, gInputStartY, WIDTH, input_height, 0);
+    lcd_rect(0, gInputStartY, WIDTH, input_height, gBgCol);
 
     gCursorX = 0;
     gCursorY = gInputStartY;

@@ -10,14 +10,13 @@
 #define HEIGHT          (320)           // pixels down the LCD
 
 // Handy macros
-#define RGB(r,g,b)      ((uint16_t)(((r) >> 3) << 11 | ((g) >> 2) << 5 | ((b) >> 3)))
 #define UPPER8(x)       ((x) >> 8)      // upper byte of a 16-bit value
 #define LOWER8(x)       ((x) & 0xFF)    // lower byte of a 16-bit value
 
 //----------------------------------------------------------------------------------------
 
 // Initialization
-bool lcd_init();
+bool lcd_init(uint16_t clearCol);
 void lcd_cleanup();
 
 #ifdef MLN_TARGET_PC

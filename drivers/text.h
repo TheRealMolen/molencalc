@@ -5,6 +5,7 @@
 //-------------------------------------------------------------------------------------------------
 
 typedef struct Font Font;
+typedef struct Palette Palette;
 
 //-------------------------------------------------------------------------------------------------
 
@@ -14,8 +15,12 @@ void text_scroll_up();
 
 void text_set_foreground(uint16_t colour);
 void text_set_background(uint16_t colour);
+uint16_t text_get_foreground();
+uint16_t text_get_background();
 void text_set_monospace(bool mono);
 void text_set_font(const Font *new_font);
+void text_set_palette(const Palette *new_palette);
+const Palette* text_get_palette();
 
 // Draw a character at the specified position
 // returns the width of the drawn character

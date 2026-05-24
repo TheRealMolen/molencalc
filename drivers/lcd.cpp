@@ -487,7 +487,7 @@ void lcd_display_off()
 
 
 // Initialize the LCD display
-bool lcd_init()
+bool lcd_init(uint16_t clearCol)
 {
     if (lcd_initialised)
         return true; // already initialized
@@ -586,7 +586,7 @@ bool lcd_init()
     busy_wait_us(10000);                  // required to wait at least 5ms
 
     // Clear the screen
-    lcd_clear_screen();
+    lcd_clear_screen(clearCol);
 
     #if 0
     // debug alignment check

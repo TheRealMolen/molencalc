@@ -28,12 +28,14 @@ void set_onboard_led(uint8_t led)
 }
 
 
-void init_platform()
+void init_platform(const Palette* palette)
 {
     status_led_init();
 
     stdio_init_all();
-    picocalc_init();
+
+    text_set_palette(palette);
+    picocalc_init(text_get_background());
 }
 
 
@@ -100,11 +102,11 @@ static bool cmd_screenshot(const char*)
 
         if (bytes_written == 0)
         {
-            text_emit_str("Warning: write failed to write any bytes. abandoning...\n");
+            text_emit_str("Img write failed. Abandoning.\n");
             break;
         }
 
-        text_emit_str("Warning: write to log needed another go...\n");
+        text_emit_str("write to img continuing...\n");
     }
 
     fclose(fp);
@@ -137,7 +139,7 @@ void log_to_settings(const char* str)
 
         if (bytes_written == 0)
         {
-            text_emit_str("Warning: write failed to write any bytes. abandoning...\n");
+            text_emit_str("Log write failed\n");
             break;
         }
 
@@ -180,7 +182,7 @@ int main()
 {
     char outputBuf[1024];
 
-    init_platform();
+    init_platform(palette_get_dark());
 
     calc_init(text_emit_str);
     register_calc_cmd(cmd_big, "big", "", "switches to big text");

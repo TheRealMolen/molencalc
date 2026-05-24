@@ -62,10 +62,10 @@ stdio_driver_t picocalc_stdio_driver = {
     .next = NULL,
 };
 
-void picocalc_init()
+void picocalc_init(uint16_t clearCol)
 {
     sb_init();
-    lcd_init();
+    lcd_init(clearCol);
     text_init();
     keyboard_init();
     keyboard_set_key_available_callback(picocalc_chars_available_notify);
