@@ -13,6 +13,7 @@
 #include "drivers/font.h"
 #include "drivers/lcd.h"
 #include "drivers/keyboard.h"
+#include "drivers/palette.h"
 #include "drivers/picocalc.h"
 #include "drivers/text.h"
 
@@ -68,9 +69,20 @@ static bool cmd_small(const char*)
 
 static bool cmd_screenshot(const char*)
 {
-    col16_t pixels[WIDTH*HEIGHT];
+    col8_t pixels[WIDTH*HEIGHT];
 
-    lcd_readback(0, 0, WIDTH, HEIGHT, pixels);
+    //lcd_readback(0, 0, WIDTH, HEIGHT, pixels);
+    fb_readback(0, 0, WIDTH, HEIGHT, pixels);
+
+    const Palette* pal = gfx_get_palette();
+    if (!pal)
+    {
+        text_emit_str("\nerr: no palette\n");
+        return false;
+    }
+    constexpr int numCols = 256;
+    uint8_t palRgb[numCols * 4];
+    pal->ExportAsRGBQuads(palRgb, numCols);
 
    /* {
         char head[1024];
@@ -108,6 +120,8 @@ static bool cmd_screenshot(const char*)
 
         text_emit_str("write to img continuing...\n");
     }
+
+    fwrite(palRgb, 1, sizeof(palRgb), fp);
 
     fclose(fp);
 

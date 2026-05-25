@@ -140,6 +140,26 @@ void fb_blitline(int x, int y, int width, const uint8_t* pixels)
 #endif
 }
 
+void fb_readback(int x, int y, int width, int height, col8_t *out_pixels)
+{
+#if LCD_USEFRAMEBUF
+
+    int y_framebuf = (y + lcd_y_offset);
+    if (y_framebuf >= BACKBUF_HEIGHT)
+        y_framebuf -= BACKBUF_HEIGHT;
+
+    for (int row_ix = 0; row_ix < height; ++row_ix, out_pixels += width)
+    {
+        memcpy(out_pixels, gFramebuf + (y_framebuf*WIDTH + x), width);
+
+        ++y_framebuf;
+        if (y_framebuf >= BACKBUF_HEIGHT)
+            y_framebuf -= BACKBUF_HEIGHT;
+    }
+
+#endif
+}
+
 //----------------------------------------------------------------------------------------
 
 static void lcd_disable_interrupts()

@@ -16,7 +16,7 @@
 #define UPPER8(x)       ((x) >> 8)      // upper byte of a 16-bit value
 #define LOWER8(x)       ((x) & 0xFF)    // lower byte of a 16-bit value
 
-#define LCD_USEFRAMEBUF 0
+#define LCD_USEFRAMEBUF 1
 
 //----------------------------------------------------------------------------------------
 
