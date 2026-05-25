@@ -34,7 +34,7 @@ void init_platform(const Palette* palette)
 
     stdio_init_all();
 
-    text_set_palette(palette);
+    gfx_set_palette(palette);
     picocalc_init(text_get_background());
 }
 
@@ -68,7 +68,7 @@ static bool cmd_small(const char*)
 
 static bool cmd_screenshot(const char*)
 {
-    uint16_t pixels[WIDTH*HEIGHT];
+    col16_t pixels[WIDTH*HEIGHT];
 
     lcd_readback(0, 0, WIDTH, HEIGHT, pixels);
 

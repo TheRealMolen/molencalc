@@ -49,9 +49,9 @@ GlyphMetric font_get_glyph_metric(const Font* font, char c, bool monospace)
 void font_rasterise_char(
     const Font* font,
     char c,
-    uint16_t fgcol,
-    uint16_t bgcol,
-    uint16_t* buf,
+    col_t fgcol,
+    col_t bgcol,
+    col_t* buf,
     int bufw,
     int bufh,
     int x,
@@ -63,7 +63,7 @@ void font_rasterise_char(
 
     const uint8_t* glyph = &font->Glyphs[c * fullGlyphHeight * bytesPerGlyphRow];
 
-    uint16_t* outPix = buf + x + (y*bufw);
+    col_t* outPix = buf + x + (y*bufw);
     const int pitch = bufw;
     
     const int glyphHeight = std::min(fullGlyphHeight, bufh-y);

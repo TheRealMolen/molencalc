@@ -20,6 +20,7 @@
 #include "hardware/spi.h"
 
 #include "lcd.h"
+#include "palette.h"
 
 
 #define LCD_SPI         (spi1)          // SPI interface for the LCD display
@@ -82,9 +83,14 @@
 #define LCD_CMD_F0      (0xF0)          // Manufacturer command
 #define LCD_CMD_F7      (0xF7)          // Manufacturer command
 
-#define FRAME_HEIGHT    (480)           // frame memory height in pixels
 
+#if LCD_USEFRAMEBUF
+static col_t gFramebuf[WIDTH*BACKBUF_HEIGHT];
+#endif
 
+static const Palette* gActivePalette = nullptr;
+
+//----------------------------------------------------------------------------------------
 
 // Display control functions
 void lcd_reset(void);
@@ -110,18 +116,40 @@ static bool lcd_initialised = false; // flag to indicate if the LCD is initialis
 static uint16_t lcd_y_offset = 0;                        // offset for vertical scrolling
 
 // Background processing
-static uint32_t irq_state;
+static uint32_t gSavedInterrupts = 0;
+
+
+//----------------------------------------------------------------------------------------
+
+void gfx_set_palette(const Palette* palette)
+{
+    gActivePalette = palette;
+}
+
+const Palette* gfx_get_palette()
+{
+    return gActivePalette;
+}
+
+//----------------------------------------------------------------------------------------
+
+void fb_blitline(int x, int y, int width, const uint8_t* pixels)
+{
+#if LCD_USEFRAMEBUF
+    memcpy(gFramebuf + (y*WIDTH + x), pixels, width);
+#endif
+}
+
+//----------------------------------------------------------------------------------------
 
 static void lcd_disable_interrupts()
 {
-    irq_state = save_and_disable_interrupts();
-    //gpio_put(3, true);
+    gSavedInterrupts = save_and_disable_interrupts();
 }
 
 static void lcd_enable_interrupts()
 {
-    //gpio_put(3, false);
-    restore_interrupts(irq_state);
+    restore_interrupts(gSavedInterrupts);
 }
 
 //
@@ -246,18 +274,41 @@ static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 //  red component in the upper 5 bits, the green component in the middle 6 bits, and the
 //  blue component in the lower 5 bits.
 
-void lcd_blit(const uint16_t *pixels, int x, int y, int width, int height)
+void lcd_blit(const col_t *pixels, int x, int y, int width, int height)
 {
+    int y_framebuf = (y + lcd_y_offset);
+    if (y_framebuf >= BACKBUF_HEIGHT)
+        y_framebuf -= BACKBUF_HEIGHT;
+
+#if LCD_USEPALETTE
+    if (!gActivePalette)
+        return;
+
+    uint16_t line[WIDTH];
+    for (int row_ix = 0; row_ix < height; ++row_ix)
+    {
+        gActivePalette->Inflate(line, pixels, width);
+
+        lcd_disable_interrupts();
+        lcd_set_window(x, y_framebuf, x + width - 1, y_framebuf);
+        lcd_write_cmd(LCD_CMD_RAMWR);
+        lcd_write16_buf(line, width);
+        lcd_enable_interrupts();
+
+        fb_blitline(x, y_framebuf, width, pixels);
+
+        ++y_framebuf;
+        if (y_framebuf >= BACKBUF_HEIGHT)
+            y_framebuf = 0;
+
+        pixels += width;
+    }
+
+#else
     lcd_disable_interrupts();
 
-    // TODO: reinstate support for frozen top & bottom areas
-    
-    int y_framebuf = (y + lcd_y_offset);
-    if (y_framebuf >= FRAME_HEIGHT)
-        y_framebuf -= FRAME_HEIGHT;
-
     // cope with dest area wrapping around end of frame buf
-    const int overflow = (y_framebuf + height) - FRAME_HEIGHT;
+    const int overflow = (y_framebuf + height) - BACKBUF_HEIGHT;
     if (overflow <= 0)
     {
         lcd_set_window(x, y_framebuf, x + width - 1, y_framebuf + height - 1);
@@ -270,7 +321,7 @@ void lcd_blit(const uint16_t *pixels, int x, int y, int width, int height)
         const uint16_t height_btm = overflow;
         const uint16_t height_top = height - overflow;
 
-        lcd_set_window(x, y_framebuf, x + width - 1, FRAME_HEIGHT - 1);
+        lcd_set_window(x, y_framebuf, x + width - 1, BACKBUF_HEIGHT - 1);
         lcd_write_cmd(LCD_CMD_RAMWR);
         lcd_write16_buf(pixels, width * height_top);
 
@@ -281,12 +332,13 @@ void lcd_blit(const uint16_t *pixels, int x, int y, int width, int height)
     }
 
     lcd_enable_interrupts();
+#endif
 }
 
 // Draw a solid rectangle on the display
-void lcd_rect(int x, int y, int width, int height, uint16_t col)
+void lcd_rect(int x, int y, int width, int height, col_t col)
 {
-    static uint16_t pixels[WIDTH];
+    static col_t pixels[WIDTH];
 
     for (uint16_t i = 0; i < width; i++)
     {
@@ -299,13 +351,13 @@ void lcd_rect(int x, int y, int width, int height, uint16_t col)
 }
 
 
-void lcd_readback(int x, int y, int width, int height, uint16_t *out_pixels)
+void lcd_readback(int x, int y, int width, int height, col16_t *out_pixels)
 {
     lcd_disable_interrupts();
     
     int y_framebuf = (y + lcd_y_offset);
-    if (y_framebuf >= FRAME_HEIGHT)
-        y_framebuf -= FRAME_HEIGHT;
+    if (y_framebuf >= BACKBUF_HEIGHT)
+        y_framebuf -= BACKBUF_HEIGHT;
 
     lcd_set_window(x, y_framebuf, x + width - 1, y_framebuf + height - 1);
     
@@ -376,8 +428,8 @@ void lcd_define_scrolling(uint16_t top_fixed_area, uint16_t bottom_fixed_area)
     lcd_write_data(6,
                    UPPER8(top_fixed_area),
                    LOWER8(top_fixed_area),
-                   UPPER8(FRAME_HEIGHT),
-                   LOWER8(FRAME_HEIGHT),
+                   UPPER8(BACKBUF_HEIGHT),
+                   LOWER8(BACKBUF_HEIGHT),
                    UPPER8(bottom_fixed_area),
                    LOWER8(bottom_fixed_area));
     lcd_enable_interrupts();
@@ -397,7 +449,7 @@ void lcd_scroll_reset()
     lcd_enable_interrupts();
 }
 
-void lcd_scroll_clear(uint16_t col)
+void lcd_scroll_clear(col_t col)
 {
     lcd_scroll_reset(); // Reset the scroll area to the top
 
@@ -406,10 +458,10 @@ void lcd_scroll_clear(uint16_t col)
 }
 
 // Scroll the screen up (make space at the bottom)
-void lcd_scroll_up(uint32_t distance, uint16_t clearCol)
+void lcd_scroll_up(uint32_t distance, col_t clearCol)
 {
     // This will rotate the content in the scroll area up by one line
-    lcd_y_offset = (lcd_y_offset + distance) % FRAME_HEIGHT;
+    lcd_y_offset = (lcd_y_offset + distance) % BACKBUF_HEIGHT;
     uint16_t scroll_area_start = lcd_y_offset;
 
     lcd_disable_interrupts();
@@ -422,10 +474,10 @@ void lcd_scroll_up(uint32_t distance, uint16_t clearCol)
 }
 
 // Scroll the screen down one line (making space at the top)
-void lcd_scroll_down(uint32_t distance, uint16_t clearCol)
+void lcd_scroll_down(uint32_t distance, col_t clearCol)
 {
     // This will rotate the content in the scroll area down by one line
-    lcd_y_offset = (lcd_y_offset - distance + FRAME_HEIGHT) % FRAME_HEIGHT;
+    lcd_y_offset = (lcd_y_offset - distance + BACKBUF_HEIGHT) % BACKBUF_HEIGHT;
     uint16_t scroll_area_start = lcd_y_offset;
 
     lcd_disable_interrupts();
@@ -442,10 +494,10 @@ void lcd_scroll_down(uint32_t distance, uint16_t clearCol)
 //
 
 // Clear the entire screen
-void lcd_clear_screen(uint16_t col)
+void lcd_clear_screen(col_t col)
 {
     lcd_scroll_reset(); // Reset the scrolling area to the top
-    lcd_rect(0, 0, WIDTH, FRAME_HEIGHT, col);
+    lcd_rect(0, 0, WIDTH, BACKBUF_HEIGHT, col);
 }
  
 
@@ -487,7 +539,7 @@ void lcd_display_off()
 
 
 // Initialize the LCD display
-bool lcd_init(uint16_t clearCol)
+bool lcd_init(col_t clearCol)
 {
     if (lcd_initialised)
         return true; // already initialized

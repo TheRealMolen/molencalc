@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "colours.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -35,9 +37,9 @@ GlyphMetric font_get_glyph_metric(const Font* font, char c, bool monospace);
 void font_rasterise_char(
     const Font* font,
     char c,
-    uint16_t fgcol,
-    uint16_t bgcol,
-    uint16_t* buf,
+    col_t fgcol,
+    col_t bgcol,
+    col_t* buf,
     int bufw,
     int bufh,
     int x,

@@ -7,6 +7,7 @@
 
 #include <string.h>
 
+#include "colours.h"
 #include "font.h"
 #include "keyboard.h"
 #include "lcd.h"
@@ -21,12 +22,13 @@
 // Text drawing
 const Font *gFont = &font_10x16;
 
-static uint16_t char_buffer[16 * FONT_MAX_HEIGHT] __attribute__((aligned(4)));
-
-static uint16_t gFgCol = 0xFF07;
-static uint16_t gBgCol = 0x0000;
-
-const Palette* gActivePalette = nullptr;
+#if LCD_USEPALETTE
+static col_t gFgCol = PAL_FG;
+static col_t gBgCol = PAL_BG;
+#else
+static col_t gFgCol = COL_DEFAULT_FG;
+static col_t gBgCol = COL_DEFAULT_BG;
+#endif
 
 static bool gMonospace = false;
 
@@ -100,21 +102,21 @@ void text_set_font(const Font *new_font)
     gFont = new_font;
 }
 
-void text_set_foreground(uint16_t colour)
+void text_set_foreground(col_t colour)
 {
     gFgCol = colour;
 }
 
-void text_set_background(uint16_t colour)
+void text_set_background(col_t colour)
 {
     gBgCol = colour;
 }
 
-uint16_t text_get_foreground()
+col_t text_get_foreground()
 {
     return gFgCol;
 }
-uint16_t text_get_background()
+col_t text_get_background()
 {
     return gBgCol;
 }
@@ -122,21 +124,6 @@ uint16_t text_get_background()
 void text_set_monospace(bool mono)
 {
     gMonospace = mono;
-}
-
-void text_set_palette(const Palette* palette)
-{
-    gActivePalette = palette;
-
-    if (palette)
-    {
-        gBgCol = palette->Cols[0];
-        gFgCol = palette->Cols[1];
-    }
-}
-const Palette* text_get_palette()
-{
-    return gActivePalette;
 }
 
 //----------------------------------------------------------------------------------------
@@ -164,6 +151,8 @@ void text_scroll_up()
 // returns the width of the drawn character
 uint8_t text_putc(int x, int y, uint8_t c)
 {
+    col_t char_buffer[16 * FONT_MAX_HEIGHT] __attribute__((aligned(4)));
+
     const int glyph_width = gFont->Width;
     const int glyph_height = gFont->Height;
     font_rasterise_char(gFont, c, gFgCol, gBgCol, char_buffer, glyph_width, glyph_height, 0, 0);
@@ -173,8 +162,8 @@ uint8_t text_putc(int x, int y, uint8_t c)
     // if we have any skipping/shrinking to do, do that inplace
     if (metric.Skip > 0 || metric.Advance < glyph_width)
     {
-        uint16_t* dest = char_buffer;
-        const uint16_t* src = char_buffer + metric.Skip;
+        col_t* dest = char_buffer;
+        const col_t* src = char_buffer + metric.Skip;
         for (int row = 0; row < glyph_height; ++row)
         {
             memmove(dest, src, metric.Advance * sizeof(*src));
@@ -191,7 +180,7 @@ uint8_t text_putc(int x, int y, uint8_t c)
 }
 
 
-void text_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh) 
+void text_put_image(const col_t* pixels, uint32_t imgw, uint32_t imgh) 
 {
     cursor_erase();
 
@@ -201,7 +190,7 @@ void text_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh)
     // is more effort than i'm interested in :)
     uint32_t height_remaining = imgh;
 
-    const uint16_t* next_pixels = pixels;
+    const col_t* next_pixels = pixels;
     while (height_remaining > 0)
     {
         constexpr int line_height = 1;
@@ -353,7 +342,7 @@ bool cursor_is_enabled()
 }
 
 
-static void blit_cursor(uint16_t col)
+static void blit_cursor(col_t col)
 {
     if (!gCursorEnabled)
         return;

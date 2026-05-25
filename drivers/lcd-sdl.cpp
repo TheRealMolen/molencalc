@@ -11,10 +11,6 @@
 
 //----------------------------------------------------------------------------------------
 
-#define FRAME_HEIGHT    (480)
-
-//----------------------------------------------------------------------------------------
-
 SDL_Surface* gFrameSurface = nullptr;   // the equivalent of the 320x480 scrollable frame in the lcd
 SDL_Surface* gBackBuffer = nullptr;     // the equivalent of the screen pixels on the lcd
 
@@ -24,7 +20,7 @@ static uint16_t lcd_y_offset = 0;  // offset for vertical scrolling
 
 bool lcd_init()
 {
-    gFrameSurface = SDL_CreateRGBSurfaceWithFormat(0, WIDTH, FRAME_HEIGHT, 16, SDL_PIXELFORMAT_RGB565);
+    gFrameSurface = SDL_CreateRGBSurfaceWithFormat(0, WIDTH, BACKBUF_HEIGHT, 16, SDL_PIXELFORMAT_RGB565);
     if (!gFrameSurface)
     {
         fprintf(stderr, "Failed to create RGB565 frame surface: %s\n", SDL_GetError());
@@ -61,7 +57,7 @@ void lcd_refresh(SDL_Window* window)
         printf("\nrefresh, y_offs=%d\n", lcd_y_offset);
 
     // step 1: render the top part of the screen, scrolled up by the current scroll offset
-    SDL_Rect src { 0, 0, WIDTH, FRAME_HEIGHT };
+    SDL_Rect src { 0, 0, WIDTH, BACKBUF_HEIGHT };
     SDL_Rect dest { 0, -lcd_y_offset, 0, 0 };
     if (shouldLog)
         printf("blit1: src(%d, %d, %d, %d)  -> dst(%d, %d, %d, %d)\n",
@@ -70,8 +66,8 @@ void lcd_refresh(SDL_Window* window)
 
     // step 2: render the bottom part of the screen
     // note that SDL_BlitSurface may overwrite our rects with clipped width & height, so we recreate
-    src = SDL_Rect{ 0, 0, WIDTH, FRAME_HEIGHT };
-    dest = SDL_Rect{ 0, FRAME_HEIGHT-lcd_y_offset, 0, 0 };
+    src = SDL_Rect{ 0, 0, WIDTH, BACKBUF_HEIGHT };
+    dest = SDL_Rect{ 0, BACKBUF_HEIGHT-lcd_y_offset, 0, 0 };
     if (shouldLog)
         printf("blit2: src(%d, %d, %d, %d)  -> dst(%d, %d, %d, %d)\n",
             src.x, src.y, src.w, src.h, dest.x, dest.y, dest.w, dest.h);
@@ -89,10 +85,10 @@ void lcd_rect(int x, int y, int w, int h, uint16_t col)
 {
     // cope with rect wrapping around Y
     int y_framebuf = (y + lcd_y_offset);
-    if (y_framebuf >= FRAME_HEIGHT)
-        y_framebuf -= FRAME_HEIGHT;
+    if (y_framebuf >= BACKBUF_HEIGHT)
+        y_framebuf -= BACKBUF_HEIGHT;
 
-    int overflow = (y_framebuf + h) - FRAME_HEIGHT;
+    int overflow = (y_framebuf + h) - BACKBUF_HEIGHT;
     if (overflow <= 0)
     {
         SDL_Rect rect { x, y_framebuf, w, h };
@@ -120,10 +116,10 @@ void lcd_blit(const uint16_t *pixels, int x, int y, int width, int height)
 
     // cope with rect wrapping around Y
     int y_framebuf = (y + lcd_y_offset);
-    if (y_framebuf >= FRAME_HEIGHT)
-        y_framebuf -= FRAME_HEIGHT;
+    if (y_framebuf >= BACKBUF_HEIGHT)
+        y_framebuf -= BACKBUF_HEIGHT;
 
-    int overflow = (y_framebuf + height) - FRAME_HEIGHT;
+    int overflow = (y_framebuf + height) - BACKBUF_HEIGHT;
     if (overflow <= 0)
     {
         SDL_Rect dst { x, y_framebuf, width, height };
@@ -169,8 +165,8 @@ void lcd_scroll_clear(uint16_t col)
 void lcd_scroll_up(uint32_t distance, uint16_t clearCol)
 {
     lcd_y_offset += distance;
-    while (lcd_y_offset >= FRAME_HEIGHT)
-        lcd_y_offset -= FRAME_HEIGHT;
+    while (lcd_y_offset >= BACKBUF_HEIGHT)
+        lcd_y_offset -= BACKBUF_HEIGHT;
 
     // we have just exposed an uncleared area of the framebuf, so clear it
     lcd_rect(0, HEIGHT - distance, WIDTH, distance, clearCol);
@@ -180,7 +176,7 @@ void lcd_scroll_up(uint32_t distance, uint16_t clearCol)
 void lcd_scroll_down(uint32_t distance, uint16_t clearCol)
 {
     // This will rotate the content in the scroll area down by one line
-    lcd_y_offset = (lcd_y_offset - distance + FRAME_HEIGHT) % FRAME_HEIGHT;
+    lcd_y_offset = (lcd_y_offset - distance + BACKBUF_HEIGHT) % BACKBUF_HEIGHT;
 
     // Clear the new line at the top
     lcd_rect(0, 0, WIDTH, distance, clearCol);

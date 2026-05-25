@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "drivers/colours.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -52,7 +54,7 @@ bool calc_eval(const char* expr, char* resBuffer, int resBufferLen);
 
 typedef struct
 {
-    uint16_t Pixels[MC_PLOT_WIDTH * MC_PLOT_HEIGHT];
+    col_t Pixels[MC_PLOT_WIDTH * MC_PLOT_HEIGHT];
 } Plot;
 
 

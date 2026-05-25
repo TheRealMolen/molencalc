@@ -2,8 +2,10 @@
 
 #include "platform.h"
 
+#include "drivers/colours.h"
 #include "drivers/keyboard.h"
 #include "drivers/lcd.h"
+#include "drivers/palette.h"
 #include "drivers/text.h"
 
 #include <cstring>
@@ -17,55 +19,9 @@ extern void render();
 
 //-------------------------------------------------------------------------------------------------
 
-// warmly darken an RGB565 colour by ~10%
-constexpr uint16_t darken(uint16_t c)
-{
-    uint16_t r = c >> 11;
-    uint16_t g = (c >> 5) & 0x3f;
-    uint16_t b = c & 0x1f;
+static const uint8_t kFbPalStart = PAL_FBGRADIENT;  // our colour 0 maps to this colour in the global palette
 
-    r = (r * 15) / 16;
-    g = (g * 29) / 32;
-    b = (b * 14) / 16;
-
-    return (r << 11) | (g << 5) | (b);
-}
-
-template<unsigned int count>
-constexpr uint16_t darkenTimes(uint16_t c)
-{
-    return darkenTimes<count - 1>(darken(c));
-}
-template<>
-constexpr uint16_t darkenTimes<0>(uint16_t c)
-{
-    return c;
-}
-
-
-static constexpr uint16_t COL_AMBER = 0xff0a;
-static constexpr uint16_t COL_AQUA = 0xb7f5;
-static constexpr uint16_t COL_TinyScope = COL_AMBER;
-
-const uint16_t TinyScopeFrameBuf::kPalette[16] =
-{
-    0,
-    darkenTimes<14>(COL_TinyScope),
-    darkenTimes<13>(COL_TinyScope),
-    darkenTimes<12>(COL_TinyScope),
-    darkenTimes<11>(COL_TinyScope),
-    darkenTimes<10>(COL_TinyScope),
-    darkenTimes< 9>(COL_TinyScope),
-    darkenTimes< 8>(COL_TinyScope),
-    darkenTimes< 7>(COL_TinyScope),
-    darkenTimes< 6>(COL_TinyScope),
-    darkenTimes< 5>(COL_TinyScope),
-    darkenTimes< 4>(COL_TinyScope),
-    darkenTimes< 3>(COL_TinyScope),
-    darkenTimes< 2>(COL_TinyScope),
-    darkenTimes< 1>(COL_TinyScope),
-    darkenTimes< 0>(COL_TinyScope),
-};
+//-------------------------------------------------------------------------------------------------
 
 TinyScopeFrameBuf::TinyScopeFrameBuf()
 {
@@ -93,18 +49,33 @@ void TinyScopeFrameBuf::tick()
 }
 
 
-void TinyScopeFrameBuf::getRow(int y, uint16_t* rowBuf) const
+void TinyScopeFrameBuf::getRow(int y, col_t* rowBuf) const
 {
+#ifndef LCD_USEPALETTE
+    const Palette* pal = gfx_get_palette();
+    if (!pal)
+        return;
+#endif
+
     const uint8_t* ppix = mPix + (y * ROWPITCH_BYTES);
     const uint8_t* pixEnd = ppix + ROWPITCH_BYTES;
 
-    uint16_t* outPix = rowBuf;
+    col_t* outPix = rowBuf;
 
     for (; ppix != pixEnd; ++ppix)
     {
         const uint8_t pix = *ppix;
-        *(outPix++) = kPalette[pix >> 4];
-        *(outPix++) = kPalette[pix & 0xf];
+
+        const int pix0 = (pix >> 4) + kFbPalStart;
+        const int pix1 = (pix & 0xf) + kFbPalStart;
+
+#ifdef LCD_USEPALETTE
+        *(outPix++) = pix0;
+        *(outPix++) = pix1;
+#else
+        *(outPix++) = pal->Cols[pix0];
+        *(outPix++) = pal->Cols[pix1];
+#endif
     }
 }
 
@@ -137,7 +108,7 @@ void AnimRenderer::darken()
 void AnimRenderer::blit() const
 {
     // expand row-by-row to local array and then blit each of those in turn
-    uint16_t row[IMGW];
+    col_t row[IMGW];
     const int x = TinyScopeFrameBuf::BORDER;
     int y = TinyScopeFrameBuf::BORDER;
     for (int i=0; i<IMGH; ++i, ++y)

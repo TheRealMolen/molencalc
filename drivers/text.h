@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "colours.h"
+
 //-------------------------------------------------------------------------------------------------
 
 typedef struct Font Font;
@@ -13,20 +15,18 @@ void text_init();
 
 void text_scroll_up();
 
-void text_set_foreground(uint16_t colour);
-void text_set_background(uint16_t colour);
-uint16_t text_get_foreground();
-uint16_t text_get_background();
+void text_set_foreground(col_t colour);
+void text_set_background(col_t colour);
+col_t text_get_foreground();
+col_t text_get_background();
 void text_set_monospace(bool mono);
 void text_set_font(const Font *new_font);
-void text_set_palette(const Palette *new_palette);
-const Palette* text_get_palette();
 
 // Draw a character at the specified position
 // returns the width of the drawn character
 uint8_t text_putc(int x, int y, uint8_t c);
 
-void text_put_image(const uint16_t* pixels, uint32_t imgw, uint32_t imgh);
+void text_put_image(const col_t* pixels, uint32_t imgw, uint32_t imgh);
 
 void text_inc_column(uint8_t advance);
 void text_backspace();

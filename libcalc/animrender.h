@@ -1,5 +1,7 @@
 #pragma once
 
+#include "drivers/lcd.h"    // for colour things
+
 #include "platform.h"
 #include "plot.h"
 
@@ -15,14 +17,11 @@ class TinyScopeFrameBuf
 public:
     static constexpr int BORDER = 4;
 
-    static constexpr int FULLWIDTH = 320;
-    static constexpr int FULLHEIGHT = 320;
+    static constexpr int FULLWIDTH = WIDTH;
+    static constexpr int FULLHEIGHT = HEIGHT;
 
     static constexpr int IMGW = FULLWIDTH - 2*BORDER;
     static constexpr int IMGH = FULLHEIGHT - 2*BORDER;
-
-    static const uint16_t kPalette[16];
-
 
     TinyScopeFrameBuf();
 
@@ -46,7 +45,7 @@ public:
     void tick();
 
     // output one row as renderable pixels
-    void getRow(int y, uint16_t* rowBuf) const;
+    void getRow(int y, col_t* rowBuf) const;
 
 
 private:
