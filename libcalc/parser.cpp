@@ -96,8 +96,6 @@ void on_parse_error(ParseCtx& ctx, const char* msg)
 
         for (const char* in=nearBuf; *in && resCurr < resBufEnd; ++in, ++resCurr)
             *resCurr = *in;
-        if (resCurr < resBufEnd)
-            *(resCurr++) = '\n';
     }
 #endif
 

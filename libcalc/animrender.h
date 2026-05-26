@@ -15,7 +15,7 @@
 class TinyScopeFrameBuf
 {
 public:
-    static constexpr int BORDER = 4;
+    static constexpr int BORDER = 0;
 
     static constexpr int FULLWIDTH = WIDTH;
     static constexpr int FULLHEIGHT = HEIGHT;

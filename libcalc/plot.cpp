@@ -163,6 +163,8 @@ bool draw_plot(const char* func_name, const PlotAxis* xAxis, const PlotAxis* yAx
     {
         const double x = xAx.FromScreen(xi);
         const double y = eval_user_func(func, x, ctx);
+        if (ctx.Error)
+            return false;
 
         const double yscr = yAx.ToScreen(y);
         const int yi = int(yscr);

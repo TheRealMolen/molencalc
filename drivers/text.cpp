@@ -9,6 +9,7 @@
 
 #include "colours.h"
 #include "font.h"
+#include "history.h"
 #include "keyboard.h"
 #include "lcd.h"
 #include "palette.h"
@@ -49,39 +50,15 @@ static repeating_timer_t gCursorTimer;
 //
 
 // this info is all about the current input "line". that "line" can span multiple screen lines
-constexpr int kMaxInputLen = 255;
+static constexpr int kMaxInputLen = 255;
 
-char gInputBuf[kMaxInputLen + 1] = {0}; // the input read buffer
-int16_t gInputEditIx = 0;               // the index of the cursor within the readbuf
-int16_t gInputLen = 0;                  // the index of the final character in the readbuf
-int16_t gInputStartY = 0;                // the y value of the start of this input line. used when clearing and resetting.
+static char gInputBuf[kMaxInputLen + 1] = {0};  // the input read buffer
+static int16_t gInputEditIx = 0;                // the index of the cursor within the readbuf
+static int16_t gInputLen = 0;                   // the index of the final character in the readbuf
+static int16_t gInputStartY = 0;                // the y value of the start of this input line. used when clearing and resetting.
 
-bool gInputTextComplete = false;        // set to true when gInputBuf[gInputLen] has been set to 0 to terminate the string
-
-//----------------------------------------------------------------------------------------
-// Input history
-
-// the line history buffer is in two parts:
-//  1. a rolling buffer of chars excluding newlines and terminators; just a big block of chars
-//  2. ringbuffer of indices into the above + lengths
-constexpr int kHistoryBufSize = 2 * 1024;
-constexpr int kHistoryMaxLines = 32;
-
-struct HistoryLine
-{
-    uint16_t StartIx = 0;
-    uint16_t Length = 0;
-    bool     Valid = false;
-};
-
-char gHistoryBuf[kHistoryBufSize] = {0};
-int gNextHistoryWriteChar = 0;
-HistoryLine gHistoryLines[kHistoryMaxLines];
-int gCurrHistoryLine = 0;
-
-void history_add_line(const char* line);
-const char* history_prev();
-const char* history_next();
+static bool gInputTextEdited = false;           // is there anything in the input buffer that didn't come from the history?
+static bool gInputTextComplete = false;         // set to true when gInputBuf[gInputLen] has been set to 0 to terminate the string
 
 //----------------------------------------------------------------------------------------
 
@@ -440,6 +417,7 @@ static void input_delete_prev_char()
 
     --gInputEditIx;
     --gInputLen;
+    gInputTextEdited = true;
 }
 
 void input_move_cursor_left()
@@ -458,6 +436,51 @@ void input_move_cursor_right()
         gInputEditIx = gInputLen;
 }
 
+//-------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
+
+static void replace_input_line(const char* new_line)
+{
+    if (!new_line)
+        return;
+
+    gInputEditIx = 0;
+    gInputLen = 0;
+
+    text_clear_line(">");
+
+    for (const char* c = new_line; *c; ++c)
+    {
+        input_process_char(*c);
+    }
+
+    gInputTextEdited = false;
+    gInputTextComplete = false;
+}
+
+static void on_up_pressed()
+{
+    //bank_current_line();
+
+    replace_input_line(hist_get_curr_line());
+
+    if (!hist_prev())
+        return;
+}
+
+static void on_down_pressed()
+{
+    //bank_current_line();
+
+    if (!hist_next())
+    {
+        replace_input_line("");
+        return;
+    }
+
+    replace_input_line(hist_get_curr_line());
+}
+
 // adds a (printable) character to the current cursor pos in our input line
 static void input_enter_char(char c)
 {
@@ -472,6 +495,7 @@ static void input_enter_char(char c)
     gInputBuf[gInputEditIx] = c;
     ++gInputEditIx;
     ++gInputLen;
+    gInputTextEdited = true;
 
     if (in_edit_mode())
     {
@@ -496,9 +520,11 @@ void input_process_char(int c)
         cursor_erase();
         text_next_line();
 
-        // null-terminate and reremember that we have a complete line
+        // null-terminate and remember that we have a complete line
         gInputBuf[gInputLen] = 0;
-        gInputTextComplete = true;
+        gInputTextComplete = true; 
+
+        hist_add_line(gInputBuf);
         return;
 
     case KEY_BACKSPACE:
@@ -515,12 +541,10 @@ void input_process_char(int c)
         break;
 
     case KEY_UP:
-        //TODO: writeme
-        gInputEditIx = gInputLen = 0;
-        text_clear_line(">");
+        on_up_pressed();
         break;
     case KEY_DOWN:
-        //TODO: writeme
+        on_down_pressed();
         break;
 
     case KEY_LEFT:
@@ -560,32 +584,16 @@ void input_reset_line()
     gInputBuf[0] = 0;
     gInputTextComplete = false;
 
-    text_emit_str("\n>");
-}
-
-//-------------------------------------------------------------------------------------------------
-
-void history_add_line(const char* line)
-{
-    (void)line;
-}
-
-const char* history_prev()
-{
-    return nullptr;
-}
-
-const char* history_next()
-{
-    return nullptr;
+    //text_emit_str(">");
+    text_clear_line(">");
 }
 
 //-------------------------------------------------------------------------------------------------
 
 void text_init()
 {
-    for (HistoryLine& line : gHistoryLines)
-        line.Valid = false;
+    hist_init();
+    //hist_enable_logging(true);
 
 #if MLN_TARGET_PICO
     // Blink the cursor every second (500 ms on, 500 ms off)
