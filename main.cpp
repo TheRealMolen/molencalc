@@ -11,6 +11,7 @@
 #include "pico/status_led.h"
 
 #include "drivers/font.h"
+#include "drivers/gfx.h"
 #include "drivers/lcd.h"
 #include "drivers/keyboard.h"
 #include "drivers/palette.h"
@@ -82,7 +83,7 @@ static bool cmd_screenshot(const char*)
     }
     constexpr int numCols = 256;
     uint8_t palRgb[numCols * 4];
-    pal->ExportAsRGBQuads(palRgb, numCols);
+    pal->ExportAsBGRQuads(palRgb, numCols);
 
    /* {
         char head[1024];

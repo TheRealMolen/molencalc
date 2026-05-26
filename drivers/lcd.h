@@ -16,7 +16,7 @@
 #define UPPER8(x)       ((x) >> 8)      // upper byte of a 16-bit value
 #define LOWER8(x)       ((x) & 0xFF)    // lower byte of a 16-bit value
 
-#define LCD_USEFRAMEBUF 1
+#define GFX_USEFRAMEBUF 1
 
 //----------------------------------------------------------------------------------------
 
@@ -28,17 +28,6 @@ void lcd_cleanup();
 typedef struct SDL_Window SDL_Window;
 void lcd_refresh(SDL_Window* window);
 #endif
-
-//----------------------------------------------------------------------------------------
-// palette & frame buffer
-
-typedef struct Palette Palette;
-
-void gfx_set_palette(const Palette *new_palette);
-const Palette* gfx_get_palette();
-
-void fb_blitline(int x, int y, int width, const col8_t* pixels);
-void fb_readback(int x, int y, int width, int height, col8_t *out_pixels);
 
 //----------------------------------------------------------------------------------------
 
@@ -54,6 +43,7 @@ void lcd_readback(int x, int y, int width, int height, col16_t *out_pixels);
 void lcd_define_scrolling(uint16_t top_fixed_area, uint16_t bottom_fixed_area);
 void lcd_scroll_reset();
 void lcd_scroll_clear(col_t col = 0);
+uint16_t lcd_get_scroll_offset();
 void lcd_scroll_up(uint32_t distance, col_t clearCol = 0);
 void lcd_scroll_down(uint32_t distance, col_t clearCol = 0);
 

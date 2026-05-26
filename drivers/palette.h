@@ -22,7 +22,7 @@ typedef struct Palette
     inline void Inflate(uint16_t* outPix16, const uint8_t* inPix8, int num) const;
 
     inline void ExportAsRGB(uint8_t* outRgb, int numEntries) const;
-    inline void ExportAsRGBQuads(uint8_t* outRgbx, int numEntries) const;
+    inline void ExportAsBGRQuads(uint8_t* outRgbx, int numEntries) const;
 
 } Palette;
 
@@ -61,16 +61,16 @@ inline void Palette::ExportAsRGB(uint8_t* outRgb, int numEntries) const
 
 //----------------------------------------------------------------------------------------
 
-inline void Palette::ExportAsRGBQuads(uint8_t* outRgbx, int numEntries) const
+inline void Palette::ExportAsBGRQuads(uint8_t* outRgbx, int numEntries) const
 {
     int ix = 0;
     for (; ix < Len && ix < numEntries; ++ix, outRgbx += 4)
     {
         const uint16_t col = Cols[ix];
 
-        outRgbx[0] = RGB16_r(col);
+        outRgbx[0] = RGB16_b(col);
         outRgbx[1] = RGB16_g(col);
-        outRgbx[2] = RGB16_b(col);
+        outRgbx[2] = RGB16_r(col);
         outRgbx[3] = 0;
     }
     for (; ix < numEntries; ++ix, outRgbx += 4)

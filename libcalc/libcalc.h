@@ -15,7 +15,7 @@ typedef struct Palette Palette;
 
 //-------------------------------------------------------------------------------------------------
 
-#define MCALC_WELCOME   "molencalc v19\t   don't panic\n"
+#define MCALC_WELCOME   "molencalc v19x\t   don't panic\n"
 
 //-------------------------------------------------------------------------------------------------
 

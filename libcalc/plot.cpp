@@ -75,7 +75,7 @@ static void interpolateY(int startXi, int startYi, int endYi, col_t col)
     }
 };
 
-static void plot_hline_fast(int x0, int y, int x1, col_t col)
+[[maybe_unused]] static void plot_hline_fast(int x0, int y, int x1, col_t col)
 {
     col_t* pix = gPlot.Pixels + x0 + (y*MC_PLOT_WIDTH);
     const col_t* pixEnd = pix + (x1 - x0 + 1);
@@ -83,12 +83,38 @@ static void plot_hline_fast(int x0, int y, int x1, col_t col)
         *(pix++) = col;
 }
 
-static void plot_vline_fast(int x, int y0, int y1, col_t col)
+[[maybe_unused]] static void plot_vline_fast(int x, int y0, int y1, col_t col)
 {
     col_t* pix = gPlot.Pixels + x + (y0*MC_PLOT_WIDTH);
     const col_t* pixEnd = pix + (y1 - y0 + 1) * MC_PLOT_WIDTH;
     for (; pix != pixEnd; pix += MC_PLOT_WIDTH)
         *pix= col;
+}
+
+static void plot_hline_pat(int x0, int y, int x1, col_t col, uint8_t pattern)
+{
+    col_t* pix = gPlot.Pixels + x0 + (y*MC_PLOT_WIDTH);
+    const col_t* pixEnd = pix + (x1 - x0 + 1);
+    for (; pix != pixEnd; ++pix)
+    {
+        if (pattern & 0x80)
+            *pix = col;
+
+        pattern = (pattern << 1) | (pattern >> 7);
+    }
+}
+
+static void plot_vline_pat(int x, int y0, int y1, col_t col, uint8_t pattern)
+{
+    col_t* pix = gPlot.Pixels + x + (y0*MC_PLOT_WIDTH);
+    const col_t* pixEnd = pix + (y1 - y0 + 1) * MC_PLOT_WIDTH;
+    for (; pix != pixEnd; pix += MC_PLOT_WIDTH)
+    {
+        if (pattern & 0x80)
+            *pix= col;
+
+        pattern = (pattern << 1) | (pattern >> 7);
+    }
 }
 
 
@@ -125,10 +151,10 @@ bool draw_plot(const char* func_name, const PlotAxis* xAxis, const PlotAxis* yAx
 
     // draw some axes
     const int xZeroScr = int(yAx.ToScreenClamped(0));
-    plot_hline_fast(xAx.LoI, int(xZeroScr), xAx.HiI, axisCol);
+    plot_hline_pat(xAx.LoI, int(xZeroScr), xAx.HiI, axisCol, 0x55);
 
     const int yZeroScr = int(xAx.ToScreenClamped(0));
-    plot_vline_fast(yZeroScr, yAx.LoI, yAx.HiI, axisCol);
+    plot_vline_pat(yZeroScr, yAx.LoI, yAx.HiI, axisCol, 0x55);
     
     double lastY = eval_user_func(func, xAx.LoI, ctx);
     int lastYi = -1;

@@ -41,6 +41,7 @@ add_executable(molencalc
         drivers/keyboard.cpp
         drivers/keyboard.h
         drivers/fat32.c
+        drivers/gfx.cpp
         drivers/lcd.cpp
         drivers/lcd.h
         drivers/picocalc.cpp

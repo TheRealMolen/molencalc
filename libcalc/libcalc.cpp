@@ -9,6 +9,7 @@
 #include "plot.h"
 #include "symbols.h"
 
+#include "drivers/gfx.h"
 #include "drivers/palette.h"
 
 #include <cmath>
@@ -124,16 +125,16 @@ static const Palette gPaletteDark { kNumDarkModeCols, gDarkModeCols };
 
 static constexpr uint16_t gLiteModeCols[] =
 {
-    RGB16(207,205,210),     // default background
-    RGB16( 35, 91,116),     // default foreground
+    RGB16(200,216,208),     // default background
+    RGB16( 26, 96,104),     // default foreground
 
-    RGB16(174,172,176),     // graph area
-    RGB16(115,132,140),     // graph axes
+    RGB16(176,192,184),     // graph area
+    RGB16(128,144,136),     // graph axes
 
     RGB16(209, 92,127),     // graph line 2
     RGB16( 60,157, 87),     // graph line 3
     RGB16(210,133, 17),     // graph line 4
-    RGB16(198,215,  0),     // graph line 5
+    RGB16(235,255,  0),     // graph line 5
 
     0, 0, 0, 0,             // reserved
     0, 0, 0, 0,
@@ -319,6 +320,25 @@ bool cmd_graph_y(ParseCtx& ctx)
 }
 
 //-------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
+
+static bool cmd_theme(const char* args)
+{
+    if (!args)
+        return false;
+
+    if (args[0] == 'd')
+        gfx_set_palette(&gPaletteDark);
+    else if (args[0] == 'l')
+        gfx_set_palette(&gPaletteLite);
+    else
+        return false;
+
+    return true;
+}
+
+//-------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
 
 bool try_parse_command(ParseCtx& ctx)
 {
@@ -330,10 +350,21 @@ bool try_parse_command(ParseCtx& ctx)
         return false;
 
     // eat the command name symbol
+    const int argsOffset = ctx.CurrIx;
     expect(ctx, Token::Symbol);
 
     if (cmd->Func)
-        return cmd->Func(ctx.InBuffer + ctx.CurrIx);
+    {
+        // skip whitepace in the input
+        const char* args = ctx.InBuffer + argsOffset; 
+        while (*args == ' ')
+            ++args;
+
+        const bool result = cmd->Func(args);
+        ctx.NextToken = Token::Eof;
+
+        return result;
+    }
     if (cmd->PFunc)
         return cmd->PFunc(ctx);
 
@@ -350,6 +381,7 @@ void calc_init(calc_puts_func puts_func)
     init_commands();
 
     register_calc_cmd(cmd_graph_y, "g", "g fn [lo<x<hi] [, lo<y<hi]", "graph of y=fn(x)");
+    register_calc_cmd(cmd_theme, "theme", "theme dark|lite", "changes colour theme");
 
     register_chaos_commands();
 }
