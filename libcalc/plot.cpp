@@ -8,6 +8,18 @@
 
 //-------------------------------------------------------------------------------------------------
 
+static const col8_t kLineColours[kPlotMaxLines] = 
+{
+    PAL_FG,
+    PAL_PLOTCOLS + 0,
+    PAL_PLOTCOLS + 1,
+    PAL_PLOTCOLS + 2,
+    PAL_PLOTCOLS + 3,
+};
+static_assert((sizeof(kLineColours) / sizeof(kLineColours[0])) == kPlotMaxLines);
+
+//-------------------------------------------------------------------------------------------------
+
 static Plot gPlot;
 static Plot* gActivePlot = nullptr;
 
@@ -21,6 +33,11 @@ const Plot* get_plot()
 void reset_plot()
 {
     gActivePlot = nullptr;
+}
+
+col_t plot_get_line_col(int i)
+{
+    return kLineColours[i % kPlotMaxLines];
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -127,21 +144,25 @@ bool draw_plot(const char* func_name, const PlotAxis* xAxis, const PlotAxis* yAx
     if (!func)
         return false;
 
+    gPlot.NumLines = 0;
+    gPlot.NumLegendLines = 0;
+
     constexpr int border = 4;
+    gPlot.X = {*xAxis, border, MC_PLOT_WIDTH - border - 1};
+    gPlot.Y = {*yAxis, MC_PLOT_HEIGHT - border - 1, border};
+    const FastAxis& xAx = gPlot.X;
+    const FastAxis& yAx = gPlot.Y;
 
 #if LCD_USEPALETTE
     const col_t bgCol = PAL_PLOTAREA;
     const col_t axisCol = PAL_PLOTAXIS;
-    const col_t lineCol = PAL_FG;
+    const col_t lineCol = kLineColours[gPlot.NumLines];
 #else
     const Palette* pal = gfx_get_palette();
     const col_t bgCol = pal->Cols[PAL_PLOTAREA];
     const col_t axisCol = pal->Cols[PAL_PLOTAXIS];
-    const col_t lineCol = pal->Cols[PAL_FG];
+    const col_t lineCol = pal->Cols[kLineColours[gPlot.NumLines]];
 #endif
-
-    const FastAxis xAx(*xAxis, border, MC_PLOT_WIDTH - border - 1);
-    const FastAxis yAx(*yAxis, MC_PLOT_HEIGHT - border - 1, border);
 
     // clear our plot pixels
     col_t* pix = gPlot.Pixels;
@@ -185,6 +206,8 @@ bool draw_plot(const char* func_name, const PlotAxis* xAxis, const PlotAxis* yAx
         lastY = y;
         lastYi = yi;
     }
+
+    gPlot.NumLines = 1;
     
     gActivePlot = &gPlot;
 
@@ -193,6 +216,150 @@ bool draw_plot(const char* func_name, const PlotAxis* xAxis, const PlotAxis* yAx
 
 //-------------------------------------------------------------------------------------------------
 
+void append_to_plot(const char* func_name, ParseCtx& ctx)
+{
+    if (ctx.Error || !func_name || !gActivePlot)
+        return;
+    if (gActivePlot->NumLines >= kPlotMaxLines)
+        return;
+
+    const UserFunction* func = lookup_user_func(func_name);
+    if (!func)
+        return;
+
+    const FastAxis& xAx = gPlot.X;
+    const FastAxis& yAx = gPlot.Y;
+
+#if LCD_USEPALETTE
+    const col_t lineCol = kLineColours[gPlot.NumLines];
+#else
+    const Palette* pal = gfx_get_palette();
+    const col_t lineCol = pal->Cols[kLineColours[gPlot.NumLines]];
+#endif
+
+    double lastY = eval_user_func(func, xAx.LoI, ctx);
+    int lastYi = -1;
+
+    for (int xi=xAx.LoI; xi<=xAx.HiI; ++xi)
+    {
+        const double x = xAx.FromScreen(xi);
+        const double y = eval_user_func(func, x, ctx);
+        if (ctx.Error)
+            return;
+
+        const double yscr = yAx.ToScreen(y);
+        const int yi = int(yscr);
+
+        if (y == y)
+        {
+            safePlot(xi, yi, lineCol);
+
+            // interpolate if needed and if no nans
+            if (xi > xAx.LoI && lastY==lastY)
+            {
+                const int deltaYi = yi - lastYi;
+                if (deltaYi > 1 || deltaYi < -1)
+                   interpolateY(xi - 1, lastYi, yi, lineCol);
+            }
+        }
+
+        lastY = y;
+        lastYi = yi;
+    }
+
+    ++gPlot.NumLines;
+}
+
+//-------------------------------------------------------------------------------------------------
+
+void strcpy_ellipsis(char* dest, int destBufSize, const char* src)
+{
+    int safeLen = destBufSize - 4;
+    if (!dest)
+        return;
+    if (!src || safeLen <= 0)
+    {
+        *dest = 0;
+        return;
+    }
+        
+    const char* srcSafeEnd = src + safeLen;
+
+    const char* s = src;
+    char* d = dest;
+    for (; *s && s != srcSafeEnd; ++s, ++d)
+        *d = *s;
+
+    // we may need to ellipsify...
+    if (s[0] && s[1] && s[2] && s[3])
+    {
+        d[0] = '.';
+        d[1] = '.';
+        d[2] = '.';
+        d[3] = 0;
+        return;
+    }
+
+    char* destEnd = dest + (destBufSize - 1);
+    for (; *s && d != destEnd; ++s, ++d)
+        *d = *s;
+
+    *d = 0;
+}
+
+//-------------------------------------------------------------------------------------------------
+
+void add_legend_line(const char* text, col_t colour)
+{
+    if (!gActivePlot || gActivePlot->NumLegendLines >= kPlotMaxLegendLines)
+        return;
+
+    PlotLegend& leg = gActivePlot->LegendLines[gActivePlot->NumLegendLines];
+    ++gActivePlot->NumLegendLines;
+
+    leg.Col = colour;
+    strcpy_ellipsis(leg.Text, sizeof(leg.Text), text);
+}
+
+//-------------------------------------------------------------------------------------------------
+
+#if MLN_UNIT_TESTS
+#include "extern/doctest.h"
+#include <string>
+
+TEST_CASE("strcpy_ellipsis")
+{
+    char outBuf[10];
+
+    {
+        std::string empty;
+        strcpy_ellipsis(outBuf, sizeof(outBuf), empty.c_str());
+        CHECK_EQ(empty, outBuf);
+    }
+    {
+        std::string maxLen("123456789");
+        strcpy_ellipsis(outBuf, sizeof(outBuf), maxLen.c_str());
+        CHECK_EQ(maxLen, outBuf);
+    }
+    {
+        std::string longStr("When shall we three meet again?");
+        strcpy_ellipsis(outBuf, sizeof(outBuf), longStr.c_str());
+        CHECK_NE(longStr, outBuf);
+        std::string longStringEllipse("When s...");
+        CHECK_EQ(longStringEllipse, outBuf);
+    }
+    {
+        std::string minTrunc("1234567890");
+        strcpy_ellipsis(outBuf, sizeof(outBuf), minTrunc.c_str());
+        CHECK_NE(minTrunc, outBuf);
+        std::string minTruncEllipse("123456...");
+        CHECK_EQ(minTruncEllipse, outBuf);
+    }
+}
 
 
+
+#endif
+
+//-------------------------------------------------------------------------------------------------
 

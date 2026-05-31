@@ -11,16 +11,7 @@ extern "C" {
 
 //-------------------------------------------------------------------------------------------------
 
-typedef struct Palette Palette;
-
-//-------------------------------------------------------------------------------------------------
-
-#define MCALC_WELCOME   "molencalc v20\t   don't panic\n"
-
-//-------------------------------------------------------------------------------------------------
-
-const Palette* palette_get_lite();
-const Palette* palette_get_dark();
+#define MCALC_WELCOME   "molencalc v21\t   don't panic\n"
 
 //-------------------------------------------------------------------------------------------------
 
@@ -41,25 +32,7 @@ void register_calc_cmd(calc_cmd_func func, const char* name, const char* usage, 
 void calc_init(calc_puts_func puts_func);
 bool calc_eval(const char* expr, char* resBuffer, int resBufferLen);
 
-//-------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------
-
-#ifndef MC_PLOT_WIDTH
-#define MC_PLOT_WIDTH   240
-#endif
-
-#ifndef MC_PLOT_HEIGHT
-#define MC_PLOT_HEIGHT  (((MC_PLOT_WIDTH) * 3) / 4)
-#endif
-
-typedef struct
-{
-    col_t Pixels[MC_PLOT_WIDTH * MC_PLOT_HEIGHT];
-} Plot;
-
-
-const Plot* get_plot(); // returns null if a plot hasn't been created since reset_plot()
-void reset_plot();
+void calc_process_input();
 
 //-------------------------------------------------------------------------------------------------
 

@@ -129,6 +129,22 @@ void undef_value(const char* name)
 
 //-----------------------------------------------------------------------------------------------
 
+UserSymbolIt lookup_user_sym(const char* name)
+{
+    return find_or_alloc_usersym(name);
+}
+
+void set_user_sym(UserSymbolIt itSym, double val)
+{
+    if (!itSym || !itSym->IsUsed)
+        return;
+
+    UserSymbol* sym = const_cast<UserSymbol*>(itSym);
+    sym->Value = val;
+}
+
+//-----------------------------------------------------------------------------------------------
+
 BuiltinSymbolIt symbol_builtin_begin()
 {
     return gSymbols;

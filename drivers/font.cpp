@@ -16,10 +16,10 @@ GlyphMetric font_get_glyph_metric(const Font* font, char c, bool monospace)
     {
         if (c == ' ')
             return { .Skip = 0, .Advance = uint8_t(glyphWidth - 2) };
-        if (c == '\'' || c == '.' || c == ',')
+        if (c == '\'' || c == '.')
             return { .Skip = 3, .Advance = uint8_t(glyphWidth - 7) };
-        if (c == ';' || c == ':')
-            return { .Skip = 2, .Advance = uint8_t(glyphWidth - 5) };
+        if (c == ';' || c == ':' || c == ',')
+            return { .Skip = 2, .Advance = uint8_t(glyphWidth - 3) };
         if (c == 'i')
             return { .Skip = 1, .Advance = uint8_t(glyphWidth - 4) };
         if (c == 'l' || c == '1')

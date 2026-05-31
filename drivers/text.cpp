@@ -78,6 +78,10 @@ void text_set_font(const Font *new_font)
 {
     gFont = new_font;
 }
+const Font* text_get_font()
+{
+    return gFont;
+}
 
 void text_set_foreground(col_t colour)
 {
@@ -113,13 +117,13 @@ void text_scroll_up()
 
     lcd_scroll_up(distance, gBgCol);
 
-    const int startY = gCursorY;
-    if (gCursorY > distance)
-        gCursorY -= distance;
-    else
-        gCursorY = 0;
+    gCursorY -= distance;
+    gInputStartY -= distance;
 
-    gInputStartY -= (gCursorY - startY);
+    if (gCursorY < 0)
+        gCursorY = 0;
+    if (gInputStartY < 0)
+        gInputStartY = 0;
 }
 
 //----------------------------------------------------------------------------------------
@@ -151,6 +155,10 @@ uint8_t text_putc(int x, int y, uint8_t c)
 
     // the buf width is the smaller of the glyph_width and Advance
     const int bufw = (glyph_width < metric.Advance) ? glyph_width : metric.Advance;
+
+    x += gCursorX;
+    y += gCursorY;
+
     lcd_blit(char_buffer, x, y, bufw, glyph_height);
 
     return metric.Advance;
@@ -187,6 +195,9 @@ void text_put_image(const col_t* pixels, uint32_t imgw, uint32_t imgh)
         height_remaining -= line_height;
         next_pixels += imgw * line_height;
     }
+
+    if (gInputStartY < 0)
+        gInputStartY = 0;
 } 
 
 
@@ -219,8 +230,6 @@ static void text_next_line()
         text_scroll_up();
 
     gCursorX = 0;
-
-    gInputStartY = gCursorY;
 }
 
 static void text_next_tab()
@@ -257,10 +266,11 @@ static void _emit_char(char c)
     const GlyphMetric metric = font_get_glyph_metric(gFont, c, gMonospace);
     if (gCursorX + metric.Advance >= WIDTH)
     {
-        text_inc_column(metric.Advance);
+        //text_inc_column(metric.Advance);
+        text_next_line();
     }
 
-    const uint8_t advance = text_putc(gCursorX, gCursorY, c);
+    const uint8_t advance = text_putc(0, 0, c);
     text_inc_column(advance);
 }
 
@@ -583,6 +593,8 @@ void input_reset_line()
     gInputLen = 0;
     gInputBuf[0] = 0;
     gInputTextComplete = false;
+
+    gInputStartY = gCursorY;
 
     //text_emit_str(">");
     text_clear_line(">");

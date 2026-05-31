@@ -21,6 +21,7 @@ col_t text_get_foreground();
 col_t text_get_background();
 void text_set_monospace(bool mono);
 void text_set_font(const Font *new_font);
+const Font* text_get_font();
 
 // Draw a character at the specified position
 // returns the width of the drawn character

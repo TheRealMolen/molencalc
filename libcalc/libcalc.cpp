@@ -5,174 +5,19 @@
 #include "expr.h"
 #include "format.h"
 #include "funcs.h"
+#include "palette.h"
 #include "parser.h"
 #include "plot.h"
 #include "symbols.h"
 
+#include "drivers/font.h"
 #include "drivers/gfx.h"
 #include "drivers/palette.h"
+#include "drivers/text.h"
 
 #include <cmath>
 #include <cstring>
 #include <iostream>
-
-//-------------------------------------------------------------------------------------------------
-// P A L E T T E   B I Z
-//
-
-namespace
-{
-    // warmly darken an RGB565 colour by ~10%
-    constexpr uint16_t darken(uint16_t c)
-    {
-        uint16_t r = c >> 11;
-        uint16_t g = (c >> 5) & 0x3f;
-        uint16_t b = c & 0x1f;
-
-        r = (r * 15) / 16;
-        g = (g * 29) / 32;
-        b = (b * 14) / 16;
-
-        return (r << 11) | (g << 5) | (b);
-    }
-
-    template<unsigned int count>
-    constexpr uint16_t darkenTimes(uint16_t c)
-    {
-        return darkenTimes<count - 1>(darken(c));
-    }
-    template<>
-    constexpr uint16_t darkenTimes<0>(uint16_t c)
-    {
-        return c;
-    }
-
-    // lighten an RGB565 colour by ~10%
-    constexpr uint16_t lighten(uint16_t c)
-    {
-        uint16_t r = c >> 11;
-        uint16_t g = (c >> 5) & 0x3f;
-        uint16_t b = c & 0x1f;
-
-        r = (r * 20) / 16;
-        g = (g * 35) / 32;
-        b = (b * 20) / 16;
-
-        if (r > 0x1f) r = 0x1f;
-        if (g > 0x3f) g = 0x3f;
-        if (b > 0x1f) b = 0x1f;
-
-        return (r << 11) | (g << 5) | (b);
-    }
-
-    template<unsigned int count>
-    constexpr uint16_t lightenTimes(uint16_t c)
-    {
-        return lightenTimes<count - 1>(lighten(c));
-    }
-    template<>
-    constexpr uint16_t lightenTimes<0>(uint16_t c)
-    {
-        return c;
-    }
-
-    static constexpr uint16_t COL_AMBER = RGB16(255,227, 57);
-    static constexpr uint16_t COL_AQUA = 0xb7f5;
-    static constexpr uint16_t COL_TinyScope_DarkMode = COL_AMBER;
-
-    static constexpr uint16_t COL_TinyScope_LiteMode = RGB16( 35, 91,116);
-}
-
-static constexpr uint16_t gDarkModeCols[] =
-{
-    RGB16(  0,  0,  0),     // default background
-    RGB16(255,227, 57),     // default foreground
-
-    RGB16( 49, 49, 49),     // graph area
-    RGB16( 98, 95,  6),     // graph axes
-
-    RGB16(224, 78,121),     // graph line 2
-    RGB16( 29,179, 71),     // graph line 3
-    RGB16( 63,153,192),     // graph line 4
-    RGB16(194, 95,246),     // graph line 5
-
-    0, 0, 0, 0,             // reserved
-    0, 0, 0, 0,
-
-    // tinyscope colours - gradient black -> col
-    0,
-    darkenTimes<14>(COL_TinyScope_DarkMode),
-    darkenTimes<13>(COL_TinyScope_DarkMode),
-    darkenTimes<12>(COL_TinyScope_DarkMode),
-    darkenTimes<11>(COL_TinyScope_DarkMode),
-    darkenTimes<10>(COL_TinyScope_DarkMode),
-    darkenTimes< 9>(COL_TinyScope_DarkMode),
-    darkenTimes< 8>(COL_TinyScope_DarkMode),
-    darkenTimes< 7>(COL_TinyScope_DarkMode),
-    darkenTimes< 6>(COL_TinyScope_DarkMode),
-    darkenTimes< 5>(COL_TinyScope_DarkMode),
-    darkenTimes< 4>(COL_TinyScope_DarkMode),
-    darkenTimes< 3>(COL_TinyScope_DarkMode),
-    darkenTimes< 2>(COL_TinyScope_DarkMode),
-    darkenTimes< 1>(COL_TinyScope_DarkMode),
-    darkenTimes< 0>(COL_TinyScope_DarkMode),
-};
-static constexpr uint8_t kNumDarkModeCols = sizeof(gDarkModeCols) / sizeof(gDarkModeCols[0]);
-static_assert(kNumDarkModeCols == 32);
-
-static const Palette gPaletteDark { kNumDarkModeCols, gDarkModeCols };
-
-
-static constexpr uint16_t gLiteModeCols[] =
-{
-    RGB16(200,216,208),     // default background
-    RGB16( 26, 96,104),     // default foreground
-
-    RGB16(176,192,184),     // graph area
-    RGB16(128,144,136),     // graph axes
-
-    RGB16(209, 92,127),     // graph line 2
-    RGB16( 60,157, 87),     // graph line 3
-    RGB16(210,133, 17),     // graph line 4
-    RGB16(235,255,  0),     // graph line 5
-
-    0, 0, 0, 0,             // reserved
-    0, 0, 0, 0,
-
-    // tinyscope colours
-    0xffff,
-    lightenTimes<14>(COL_TinyScope_LiteMode),
-    lightenTimes<13>(COL_TinyScope_LiteMode),
-    lightenTimes<12>(COL_TinyScope_LiteMode),
-    lightenTimes<11>(COL_TinyScope_LiteMode),
-    lightenTimes<10>(COL_TinyScope_LiteMode),
-    lightenTimes< 9>(COL_TinyScope_LiteMode),
-    lightenTimes< 8>(COL_TinyScope_LiteMode),
-    lightenTimes< 7>(COL_TinyScope_LiteMode),
-    lightenTimes< 6>(COL_TinyScope_LiteMode),
-    lightenTimes< 5>(COL_TinyScope_LiteMode),
-    lightenTimes< 4>(COL_TinyScope_LiteMode),
-    lightenTimes< 3>(COL_TinyScope_LiteMode),
-    lightenTimes< 2>(COL_TinyScope_LiteMode),
-    lightenTimes< 1>(COL_TinyScope_LiteMode),
-    lightenTimes< 0>(COL_TinyScope_LiteMode),
-};
-static constexpr uint8_t kNumLiteModeCols = sizeof(gLiteModeCols) / sizeof(gLiteModeCols[0]);
-static_assert(kNumLiteModeCols == 32);
-
-static const Palette gPaletteLite { kNumLiteModeCols, gLiteModeCols };
-
-//-------------------------------------------------------------------------------------------------
-
-const Palette* palette_get_lite()
-{
-    return &gPaletteLite;
-}
-
-const Palette* palette_get_dark()
-{
-    return &gPaletteDark;
-}
 
 //-------------------------------------------------------------------------------------------------
 
@@ -270,6 +115,7 @@ bool parse_axis(ParseCtx& ctx, PlotAxis& axis)
     return true;
 }
 
+//-------------------------------------------------------------------------------------------------
 
 // g f -pi<x<pi, -1<y<1
 // cmd_graph ::= "g" symbol [axis ["," axis]]
@@ -323,6 +169,142 @@ bool cmd_graph_y(ParseCtx& ctx)
 }
 
 //-------------------------------------------------------------------------------------------------
+
+static constexpr int kMaxElementsInVarList = 5; // that's as many colours as we have in the palette
+
+// primary_list ::= primary | primary "," primary_list
+// returns the number of vals parsed. outVals needs space for at least kMaxElementsInVarList
+int parse_primary_list(ParseCtx& ctx, double* outVals, int maxVals)
+{
+    int numVals = 0;
+    outVals[numVals] = parse_primary(ctx);
+    if (ctx.Error)
+        return 0;
+
+    ++numVals;
+
+    while (accept(ctx, Token::Comma))
+    {
+        if (numVals >= maxVals)
+        {
+            on_parse_error(ctx, "too many values in list");
+            return 0;
+        }
+
+        outVals[numVals] = parse_primary(ctx);
+        if (ctx.Error)
+            return 0;
+
+        ++numVals;
+    }
+
+    return numVals;
+}
+
+
+
+// mg f k=1,2,3 -pi<x<pi, -1<y<1
+// cmd_multigraph ::= "mg" symbol symbol=val_list [axis ["," axis]]
+bool cmd_multigraph_y(ParseCtx& ctx)
+{
+    char func_name[kMaxSymbolLength+1];
+    if (!expect_symbol(ctx, func_name))
+    {
+        on_parse_error(ctx, "need user func name for y=f(x)");
+        return false;
+    }
+    if (!is_user_func(func_name))
+    {
+        on_parse_error(ctx, "unknown user function");
+        return false;
+    }
+
+    char sym_name[kMaxSymbolLength+1];
+    if (!expect_symbol(ctx, sym_name))
+    {
+        on_parse_error(ctx, "missing name of varying symbol");
+        return false;
+    }
+
+    UserSymbolIt itSym = lookup_user_sym(sym_name);
+    if (!itSym)
+    {
+        on_parse_error(ctx, "unknown symbol");
+        return false;
+    }
+    if (!expect(ctx, Token::Equals))
+        return false;
+    double symVals[kMaxElementsInVarList];
+    int numSymVals = parse_primary_list(ctx, symVals, kMaxElementsInVarList);
+    if (ctx.Error)
+        return false;
+    if (numSymVals <= 1)
+    {
+        on_parse_error(ctx, "invalid/missing val list");
+        return false;
+    }
+
+    PlotAxis x { .Name = "x" };
+    PlotAxis y { .Name = "y" };
+
+    while (!peek(ctx, Token::Eof))
+    {
+        const int axisStartIx = ctx.CurrIx;
+
+        PlotAxis axis;
+        if (!parse_axis(ctx, axis))
+            return false;
+
+        if (strcmp(axis.Name, x.Name) == 0)
+            x = axis;
+        else if (strcmp(axis.Name, y.Name) == 0)
+            y = axis;
+        else
+        {
+            ctx.CurrIx = axisStartIx;
+            on_parse_error(ctx, "unknown axis");
+            return false;
+        }
+
+        if (!accept(ctx, Token::Comma))
+            break;
+    }
+
+    set_user_sym(itSym, symVals[0]);
+    if (!draw_plot(func_name, &x, &y, ctx))
+    {
+        reset_plot();
+        return false;
+    }
+
+    char legend[49];
+    snprintf(legend, sizeof(legend), "y=%s(x)", func_name);
+    add_legend_line(legend, PAL_FG);
+
+    auto add_legend = [&legend, sym_name](double val, int valIx)
+    {
+        char valStr[20];
+        dtostr_human(val, valStr, sizeof(valStr));
+        snprintf(legend, sizeof(legend), "%s=%s", sym_name, valStr);
+        add_legend_line(legend, plot_get_line_col(valIx));
+    };
+
+    add_legend(symVals[0], 0);
+
+    for (int valIx = 1; valIx < numSymVals; ++valIx)
+    {
+        double val = symVals[valIx];
+        set_user_sym(itSym, val);
+
+        append_to_plot(func_name, ctx);
+
+        add_legend(symVals[valIx], valIx);
+    }
+
+    return true;
+}
+
+//-------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------
 
 static bool cmd_theme(const char* args)
@@ -331,9 +313,9 @@ static bool cmd_theme(const char* args)
         return false;
 
     if (args[0] == 'd')
-        gfx_set_palette(&gPaletteDark);
+        gfx_set_palette(palette_get_dark());
     else if (args[0] == 'l')
-        gfx_set_palette(&gPaletteLite);
+        gfx_set_palette(palette_get_lite());
     else
         return false;
 
@@ -384,6 +366,7 @@ void calc_init(calc_puts_func puts_func)
     init_commands();
 
     register_calc_cmd(cmd_graph_y, "g", "g fn [lo<x<hi] [, lo<y<hi]", "graph of y=fn(x)");
+    register_calc_cmd(cmd_multigraph_y, "mg", "mg fn V=a,b,... [lo<x<hi] [, lo<y<hi]", "multigraph of y=fn(x)");
     register_calc_cmd(cmd_theme, "theme", "theme dark|lite", "changes colour theme");
 
     register_chaos_commands();
@@ -415,7 +398,7 @@ static bool is_expr_definition(const char* expr)
     const int prefixLen = spacePtr - expr;
     char cmdbuf[kMaxSymbolLength+1];
     memcpy(cmdbuf, expr, prefixLen);
-    cmdbuf[prefixLen+1] = 0;
+    cmdbuf[prefixLen] = 0;
     const CommandDef* cmd = lookup_command(cmdbuf);
     if (cmd)
         return false;
@@ -469,5 +452,47 @@ bool calc_eval(const char* expr, char* resBuffer, int resBufferLen)
     return !parseCtx.Error;
 }
 
+//-------------------------------------------------------------------------------------------------
 
+void calc_process_input()
+{
+    char resBuf[1024];
+
+    reset_plot();
+
+    calc_eval(input_get_line(), resBuf, sizeof(resBuf));
+
+    text_emit_str(resBuf);
+
+    if (const Plot* plot = get_plot())
+    {
+        text_put_image(plot->Pixels, MC_PLOT_WIDTH, MC_PLOT_HEIGHT);
+
+        const Font* oldFont = text_get_font();
+        const Font& font = font_5x10;
+        text_set_font(&font);
+        const col_t oldCol = text_get_foreground();
+
+        int y = 20 - MC_PLOT_HEIGHT;
+        for (int i=0; i<plot->NumLegendLines; ++i)
+        {
+            const PlotLegend& leg = plot->LegendLines[i];
+            text_set_foreground(leg.Col);
+
+            int x = 10;
+            for (const char* c = leg.Text; *c; ++c)
+                x += text_putc(x, y, *c);
+
+             y += font.Height;
+        }
+
+        text_set_font(oldFont);
+        text_set_foreground(oldCol);
+    }
+
+    text_emit_str("\n");
+    input_reset_line();
+}
+
+//-------------------------------------------------------------------------------------------------
 

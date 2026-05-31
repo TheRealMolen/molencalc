@@ -26,6 +26,7 @@ typedef struct Palette Palette;
 #define PAL_FG          (1)
 #define PAL_PLOTAREA    (2)
 #define PAL_PLOTAXIS    (3)
+#define PAL_PLOTCOLS    (4)
 #define PAL_FBGRADIENT  (16)
 
 #define COL_DEFAULT_BG  (0x0000)

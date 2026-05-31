@@ -19,6 +19,7 @@
 #include "drivers/text.h"
 
 #include "libcalc/libcalc.h"
+#include "libcalc/palette.h"
 
 
 bool power_off_requested = false;
@@ -172,7 +173,7 @@ void readline()
     {
         const char c = getchar();
 
-        if (c == KEY_F1)
+        if (c == KEY_F6)
         {
             cmd_bye(nullptr);
             continue;
@@ -195,8 +196,6 @@ void readline()
 
 int main()
 {
-    char outputBuf[1024];
-
     init_platform(palette_get_dark());
 
     calc_init(text_emit_str);
@@ -206,6 +205,7 @@ int main()
     register_calc_cmd(cmd_screenshot, "scr", "", "save a screenshot");
 
     text_emit_str(MCALC_WELCOME);
+    text_emit_str("\n");
     input_reset_line();
 
     for (;;)
@@ -215,17 +215,7 @@ int main()
         cursor_erase();
 
         log_to_settings(input_get_line());
-        
-        reset_plot();
-        calc_eval(input_get_line(), outputBuf, sizeof(outputBuf));
-        text_emit_str(outputBuf);
 
-        if (const Plot* plot = get_plot())
-        {
-            cursor_erase();
-            text_put_image(plot->Pixels, MC_PLOT_WIDTH, MC_PLOT_HEIGHT);
-        }
-
-        input_reset_line();
+        calc_process_input();
     }
 }

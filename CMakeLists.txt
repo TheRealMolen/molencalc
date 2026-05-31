@@ -65,6 +65,7 @@ add_executable(molencalc
         libcalc/funcs.cpp
         libcalc/libcalc.cpp
         libcalc/maths.cpp
+        libcalc/palette.cpp
         libcalc/parser.cpp
         libcalc/plot.cpp
         libcalc/symbols.cpp
