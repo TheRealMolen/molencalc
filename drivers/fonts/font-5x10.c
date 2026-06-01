@@ -1,5 +1,5 @@
 //
-//  PicoCalc LCD display font (8x10)
+//  PicoCalc LCD display font (5x10)
 //
 //  This font is based on the 5x8 font from:
 //
@@ -545,13 +545,13 @@ const Font font_5x10 = {
         0b00000,
 
         // 0x30
-        0b00100,
-        0b01010,
-        0b10001,
-        0b10001,
-        0b10001,
-        0b01010,
-        0b00100,
+        0b01100,
+        0b10010,
+        0b10010,
+        0b10110,
+        0b11010,
+        0b10010,
+        0b01100,
         0b00000,
         0b00000,
         0b00000,

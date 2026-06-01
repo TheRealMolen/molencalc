@@ -99,6 +99,15 @@ You can optionally specify axis ranges for the x and/or y axes with the format
 ![g f -20<x<20](https://github.com/TheRealMolen/molencalc/blob/main/assets/graph2.png?raw=true)
 ![g f -20<x<20 -0.5<y<1.2](https://github.com/TheRealMolen/molencalc/blob/main/assets/graph3.png?raw=true)
 
+#### multi-graphs
+
+It's also possible to display multiple lines on the same graph using `mg` instead of `g`:
+`mg <func_name> <var>=val1[,val2,...] [axis [, axis]]`
+
+For instance, to explore the changing cutoff frequencies of a Sallen-Key filter with two 22nF capacitors,
+a range of fixed values for R1 and a 20kohm potentiometer for R2:
+
+![mg f r1=1k,5k,10k,50k,100k](https://github.com/TheRealMolen/molencalc/blob/main/assets/multigraph.png?raw=true)
 
 ## internals
 

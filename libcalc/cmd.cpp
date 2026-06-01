@@ -5,6 +5,9 @@
 #include "parser.h"
 #include "symbols.h"
 
+#include "drivers/font.h"
+#include "drivers/text.h"
+
 #include <cstring>
 
 //-------------------------------------------------------------------------------------------------
@@ -16,12 +19,16 @@ static int gRegisteredCommands = 0;
 
 bool cmd_help(ParseCtx& ctx)
 {
+    const Font* oldFont = text_get_font();
+    text_set_font(&font_5x10);
+
     if (peek(ctx, Token::Symbol))
     {
         const CommandDef* cmd = lookup_command(ctx.TokenSymbol);
         if (!cmd)
         {
             on_parse_error(ctx, "unknown help topic");
+            text_set_font(oldFont);
             return false;
         }
         
@@ -30,25 +37,28 @@ bool cmd_help(ParseCtx& ctx)
         calc_puts(cmd->Usage);
         calc_puts("\n");
 
-        return expect(ctx, Token::Symbol);
+        expect(ctx, Token::Symbol);
     }
-
-    calc_puts("Type expression, press Enter\n\n");
-    calc_puts("Define var / function with\n");
-    calc_puts(" <name>[<var>] = <expr in var>\n");
-    calc_puts("eg.  f[x] = sin(x^2)\n");
-    calc_puts("eg.  theta = 2pi/3\n");
-    calc_puts("\n([{ and }]) are interchangeable\n\n");
-
-    const CommandDef* cmd = gCommands;
-    for (int i=0; i<gRegisteredCommands; ++i, ++cmd)
+    else
     {
-        calc_puts(cmd->Name);
-        calc_puts(" -- ");
-        calc_puts(cmd->Help);
-        calc_puts("\n");
+        calc_puts("Type expression, press Enter\n\n");
+        calc_puts("Define var / function with\n");
+        calc_puts(" <name>[<var>] = <expr in var>\n");
+        calc_puts("eg.  f[x] = sin(x^2)\n");
+        calc_puts("eg.  theta = 2pi/3\n");
+        calc_puts("\n([{ and }]) are interchangeable\n\n");
+
+        const CommandDef* cmd = gCommands;
+        for (int i=0; i<gRegisteredCommands; ++i, ++cmd)
+        {
+            calc_puts(cmd->Name);
+            calc_puts(" -- ");
+            calc_puts(cmd->Help);
+            calc_puts("\n");
+        }
     }
 
+    text_set_font(oldFont);
     return true;
 }
 

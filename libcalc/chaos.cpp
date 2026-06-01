@@ -312,11 +312,11 @@ bool cmd_anim_xy(ParseCtx& ctx)
 void register_chaos_commands()
 {
     register_calc_cmd(cmd_anim_diff<DampedPendulumSystem>, "dd", "d", "draw an animated diff eqn");
-    register_calc_cmd(cmd_anim_poincare<DampedPendulumSystem>, "pd", "p", "draw an animated poincare...\n slice of a diff eqn");
+    register_calc_cmd(cmd_anim_poincare<DampedPendulumSystem>, "pd", "p", "draw an animated poincare slice of a diff eqn");
     register_calc_cmd(cmd_anim_diff<ForcedVdPolOscillator>, "df", "d", "draw an animated diff eqn");
-    register_calc_cmd(cmd_anim_poincare<ForcedVdPolOscillator>, "pf", "p", "draw an animated poincare...\n slice of a diff eqn");
+    register_calc_cmd(cmd_anim_poincare<ForcedVdPolOscillator>, "pf", "p", "draw an animated poincare slice of a diff eqn");
     register_calc_cmd(cmd_anim_diff<SignumSystem>, "ds", "d", "draw an animated diff eqn");
-    register_calc_cmd(cmd_anim_poincare<SignumSystem>, "ps", "p", "draw an animated poincare...\n slice of a diff eqn");
+    register_calc_cmd(cmd_anim_poincare<SignumSystem>, "ps", "p", "draw an animated poincare slice of a diff eqn");
 
     register_calc_cmd(cmd_anim_xy<TinkerbellMap>, "xy", "p", "draw a tinkerbell map");
 }
